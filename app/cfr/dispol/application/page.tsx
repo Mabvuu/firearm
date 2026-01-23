@@ -1,34 +1,35 @@
 // app/cfr/dispol/application/page.tsx
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import NavPage from '../nav/page'
 import { supabase } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion'
-import { Badge } from '@/components/ui/badge'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Button } from '@/components/ui/button'
+
+const COLORS = {
+  naturalAluminum: '#D9D8D6',
+  blackBlue: '#212B37',
+  snowWhite: '#FFFEF1',
+  lamar: '#3E5C80',
+  coolGreyMedium: '#ACACAC',
+} as const
 
 type Application = {
   id: number
-  applicant_name: string
+  applicant_name: string | null
   applicant_email: string
-  national_id: string
-  address: string
-  phone: string
-  province: string
-  district: string
+  national_id: string | null
+  address: string | null
+  phone: string | null
+  province: string | null
+  district: string | null
   gun_uid: number | null
   status: string
   attachments: string[] | null
   competency_id: number | null
 
-  // flow tracking
   dispol_email: string | null
   cfr_forwarded_by_email: string | null
   cfr_forwarded_by_uid: string | null
@@ -37,8 +38,7 @@ type Application = {
   oic_approved_by_uid: string | null
 
   cfr_notes: string | null
-
-  created_at?: string
+  created_at: string
 }
 
 type Gun = {
@@ -51,7 +51,6 @@ type Gun = {
 
 type CompetencyFull = {
   id: number
-  user_id: string
   full_name: string
   national_id: string
   violent_crime_history: boolean
@@ -71,26 +70,23 @@ type CompetencyFull = {
 }
 
 const competencySelect =
-  'id, user_id, full_name, national_id, violent_crime_history, violent_crime_details, restraining_orders, restraining_order_details, mental_instability, mental_instability_details, substance_abuse, substance_abuse_details, firearms_training, firearms_training_details, threat_to_self_or_others, threat_details, notes, created_at'
+  'id, full_name, national_id, violent_crime_history, violent_crime_details, restraining_orders, restraining_order_details, mental_instability, mental_instability_details, substance_abuse, substance_abuse_details, firearms_training, firearms_training_details, threat_to_self_or_others, threat_details, notes, created_at'
 
-const statusColor = (status: string) => {
-  switch (status) {
-    case 'sent_to_dispol':
-      return 'bg-green-500'
-    case 'returned':
-    case 'declined':
-      return 'bg-red-500'
-    default:
-      return 'bg-gray-400'
+const statusPill = (status: string) => {
+  const s = (status || '').toLowerCase()
+  if (['declined', 'returned'].includes(s)) {
+    return { bg: 'rgba(239,68,68,0.16)', fg: '#991b1b', border: 'rgba(239,68,68,0.35)', dot: '#ef4444' }
   }
+  if (['sent_to_dispol', 'approved_by_oic', 'sent_to_cfr'].includes(s)) {
+    return { bg: 'rgba(34,197,94,0.16)', fg: '#166534', border: 'rgba(34,197,94,0.35)', dot: '#22c55e' }
+  }
+  return { bg: 'rgba(59,130,246,0.14)', fg: '#1e3a8a', border: 'rgba(59,130,246,0.35)', dot: '#3b82f6' }
 }
 
 export default function CFRDispolApplicationsPage() {
   const [apps, setApps] = useState<Application[]>([])
   const [guns, setGuns] = useState<Record<number, Gun | null>>({})
-  const [competencies, setCompetencies] = useState<Record<number, CompetencyFull | null>>(
-    {}
-  )
+  const [competencies, setCompetencies] = useState<Record<number, CompetencyFull | null>>({})
   const [loading, setLoading] = useState(true)
 
   const requestedGunIds = useRef<Set<number>>(new Set())
@@ -109,11 +105,13 @@ export default function CFRDispolApplicationsPage() {
 
       const { data, error } = await supabase
         .from('applications')
-        .select('*')
+        .select(
+          'id, applicant_name, applicant_email, national_id, address, phone, province, district, gun_uid, status, attachments, competency_id, dispol_email, cfr_forwarded_by_email, cfr_forwarded_by_uid, oic_approved_by_email, oic_approved_by_uid, cfr_notes, created_at'
+        )
         .eq('dispol_email', user.email)
         .order('created_at', { ascending: false })
 
-      if (!error) setApps((data as Application[]) || [])
+      if (!error) setApps((data as Application[]) ?? [])
       setLoading(false)
     }
 
@@ -131,10 +129,7 @@ export default function CFRDispolApplicationsPage() {
         .eq('id', gunId)
         .maybeSingle()
 
-      setGuns(prev => ({
-        ...prev,
-        [gunId]: error ? null : ((data as Gun) ?? null),
-      }))
+      setGuns(prev => ({ ...prev, [gunId]: error ? null : ((data as Gun) ?? null) }))
     }
 
     apps.forEach(a => {
@@ -153,10 +148,7 @@ export default function CFRDispolApplicationsPage() {
         .eq('id', compId)
         .maybeSingle()
 
-      setCompetencies(prev => ({
-        ...prev,
-        [compId]: error ? null : ((data as CompetencyFull) ?? null),
-      }))
+      setCompetencies(prev => ({ ...prev, [compId]: error ? null : ((data as CompetencyFull) ?? null) }))
     }
 
     apps.forEach(a => {
@@ -165,191 +157,300 @@ export default function CFRDispolApplicationsPage() {
   }, [apps])
 
   const getFileUrl = (path: string) => {
-    const bucket = path.startsWith('applications/')
-      ? 'applications'
-      : 'application-attachments'
+    const bucket = path.startsWith('applications/') ? 'applications' : 'application-attachments'
     return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl
   }
 
-  const renderCompetency = (c: CompetencyFull) => {
-    const row = (label: string, ok: boolean, details: string | null) => (
-      <div className="border rounded p-2">
-        <div className="flex items-center justify-between">
-          <div className="font-medium">{label}</div>
-          <Badge variant={ok ? 'destructive' : 'outline'}>{ok ? 'Yes' : 'No'}</Badge>
+  const counts = useMemo(() => {
+    const total = apps.length
+    const pending = apps.filter(a => !['declined', 'returned'].includes((a.status || '').toLowerCase())).length
+    const declined = apps.filter(a => (a.status || '').toLowerCase() === 'declined').length
+    const returned = apps.filter(a => (a.status || '').toLowerCase() === 'returned').length
+    return { total, pending, declined, returned }
+  }, [apps])
+
+  const miniRow = (label: string, value: string) => (
+    <div className="flex items-start justify-between gap-3 py-1">
+      <div className="text-[12px]" style={{ color: COLORS.coolGreyMedium }}>{label}</div>
+      <div className="text-[12px] text-right" style={{ color: COLORS.blackBlue }}>{value || '-'}</div>
+    </div>
+  )
+
+  const renderCompetencyCompact = (c: CompetencyFull) => {
+    const item = (n: number, label: string, ok: boolean, details: string | null) => (
+      <div className="py-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-sm" style={{ color: COLORS.blackBlue }}>
+            <span style={{ color: COLORS.coolGreyMedium }}>{n}.</span> {label}
+          </div>
+          <span
+            className="text-[11px] px-2 py-1 rounded border"
+            style={{
+              borderColor: ok ? 'rgba(239,68,68,0.35)' : COLORS.naturalAluminum,
+              backgroundColor: ok ? 'rgba(239,68,68,0.12)' : 'transparent',
+              color: ok ? '#991b1b' : COLORS.blackBlue,
+            }}
+          >
+            {ok ? 'Yes' : 'No'}
+          </span>
         </div>
         {ok && (details ?? '').trim() ? (
-          <div className="text-xs text-muted-foreground mt-1">Details: {details}</div>
+          <div className="mt-1 text-[12px]" style={{ color: COLORS.coolGreyMedium }}>
+            {details}
+          </div>
         ) : null}
       </div>
     )
 
     return (
-      <div className="space-y-2 text-sm">
-        <div>
-          <b>{c.full_name}</b> — {c.national_id}
+      <div className="rounded-md border bg-white" style={{ borderColor: COLORS.naturalAluminum }}>
+        <div className="px-3 py-2 border-b" style={{ borderColor: COLORS.naturalAluminum }}>
+          <div className="text-sm font-semibold" style={{ color: COLORS.blackBlue }}>
+            {c.full_name} — {c.national_id}
+          </div>
+          <div className="text-[11px]" style={{ color: COLORS.coolGreyMedium }}>
+            Competency record #{c.id}
+          </div>
         </div>
-        <div className="grid gap-2">
-          {row('Violent Crime History', c.violent_crime_history, c.violent_crime_details)}
-          {row('Restraining Orders', c.restraining_orders, c.restraining_order_details)}
-          {row('Mental Instability', c.mental_instability, c.mental_instability_details)}
-          {row('Substance Abuse', c.substance_abuse, c.substance_abuse_details)}
-          {row('Firearm Training', c.firearms_training, c.firearms_training_details)}
-          {row('Threat to Self/Others', c.threat_to_self_or_others, c.threat_details)}
+        <div className="px-3 divide-y" style={{ borderColor: COLORS.naturalAluminum }}>
+          {item(1, 'Violent crime history', c.violent_crime_history, c.violent_crime_details)}
+          {item(2, 'Restraining orders', c.restraining_orders, c.restraining_order_details)}
+          {item(3, 'Mental instability', c.mental_instability, c.mental_instability_details)}
+          {item(4, 'Substance abuse', c.substance_abuse, c.substance_abuse_details)}
+          {item(5, 'Firearm training', c.firearms_training, c.firearms_training_details)}
+          {item(6, 'Threat to self/others', c.threat_to_self_or_others, c.threat_details)}
         </div>
-        <div className="border rounded p-2">
-          <div className="font-medium">Officer Notes</div>
-          <div className="text-xs text-muted-foreground mt-1">{c.notes || '-'}</div>
+        <div className="px-3 py-3 border-t" style={{ borderColor: COLORS.naturalAluminum }}>
+          <div className="text-xs font-semibold" style={{ color: COLORS.blackBlue }}>Officer notes</div>
+          <div className="text-[12px] mt-1 whitespace-pre-wrap" style={{ color: COLORS.coolGreyMedium }}>
+            {c.notes?.trim() ? c.notes : '-'}
+          </div>
         </div>
       </div>
     )
   }
 
-  if (loading) return <div className="p-8">Loading…</div>
+  if (loading) {
+    return (
+      <div className="p-8" style={{ backgroundColor: COLORS.snowWhite, color: COLORS.blackBlue }}>
+        Loading…
+      </div>
+    )
+  }
 
   return (
-    <div className="flex min-h-screen">
-      <div className="w-1/4 border-r">
+    <div className="flex min-h-screen" style={{ backgroundColor: COLORS.snowWhite }}>
+      <div
+        className="w-1/4 min-w-[260px]"
+        style={{ borderRight: `1px solid ${COLORS.naturalAluminum}` }}
+      >
         <NavPage />
       </div>
 
       <div className="w-3/4 p-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>CFR District Police Inbox</CardTitle>
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-semibold" style={{ color: COLORS.blackBlue }}>
+              District Police Inbox
+            </h1>
+            <p className="mt-1 text-sm" style={{ color: COLORS.lamar }}>
+              Assigned: {counts.total} • Pending: {counts.pending} • Declined: {counts.declined} • Returned: {counts.returned}
+            </p>
+          </div>
+        </div>
+
+        <Card style={{ borderColor: COLORS.naturalAluminum }}>
+          <CardHeader className="border-b" style={{ borderColor: COLORS.naturalAluminum }}>
+            <CardTitle className="text-lg" style={{ color: COLORS.blackBlue }}>
+              Applications
+            </CardTitle>
           </CardHeader>
 
-          <CardContent>
-            <Accordion type="single" collapsible className="space-y-2">
-              {apps.map(app => {
-                const gun = app.gun_uid ? guns[app.gun_uid] : null
-                const comp = app.competency_id ? competencies[app.competency_id] : null
+          <CardContent className="pt-4">
+            {apps.length === 0 ? (
+              <div className="text-sm" style={{ color: COLORS.coolGreyMedium }}>
+                No applications assigned to you.
+              </div>
+            ) : (
+              <Accordion type="single" collapsible className="space-y-2">
+                {apps.map(app => {
+                  const pill = statusPill(app.status)
+                  const gun = app.gun_uid ? guns[app.gun_uid] : null
+                  const comp = app.competency_id ? competencies[app.competency_id] : null
 
-                return (
-                  <AccordionItem key={app.id} value={String(app.id)}>
-                    <AccordionTrigger className="flex items-center gap-3 px-4">
-                      <div className={`w-2 h-8 rounded ${statusColor(app.status)}`} />
-                      <div className="flex-1 text-left">
-                        <div className="font-medium">
-                          {app.applicant_name}{' '}
-                          <span className="text-xs text-muted-foreground"># {app.id}</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Dealer: {app.applicant_email}
-                        </div>
-                      </div>
-                      <Badge variant="outline">{app.status}</Badge>
-                    </AccordionTrigger>
-
-                    <AccordionContent className="p-4 space-y-4">
-                      {/* Who it came from */}
-                      <div className="border rounded p-3 text-sm space-y-1">
-                        <div>
-                          <b>Approved by OIC:</b> {app.oic_approved_by_email || '-'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          OIC UID: {app.oic_approved_by_uid || '-'}
-                        </div>
-                        <div className="pt-2">
-                          <b>Forwarded by CFR:</b> {app.cfr_forwarded_by_email || '-'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          CFR UID: {app.cfr_forwarded_by_uid || '-'}
-                        </div>
-                      </div>
-
-                      {/* Applicant */}
-                      <div className="border rounded p-3 space-y-2">
-                        <div className="font-semibold">Applicant Details</div>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div><b>National ID:</b> {app.national_id}</div>
-                          <div><b>Phone:</b> {app.phone}</div>
-                          <div><b>Address:</b> {app.address}</div>
-                          <div><b>Province:</b> {app.province}</div>
-                          <div><b>District:</b> {app.district}</div>
-                        </div>
-                      </div>
-
-                      {/* Firearm */}
-                      <div className="border rounded p-3">
-                        <div className="font-semibold mb-1">Firearm Details</div>
-                        {!app.gun_uid ? (
-                          <div className="text-sm text-muted-foreground">No firearm linked.</div>
-                        ) : gun ? (
-                          <div className="text-sm space-y-1">
-                            <div>Make: {gun.make}</div>
-                            <div>Model: {gun.model}</div>
-                            <div>Caliber: {gun.caliber}</div>
-                            <div>Serial: {gun.serial}</div>
+                  return (
+                    <AccordionItem
+                      key={app.id}
+                      value={String(app.id)}
+                      className="border rounded-md"
+                      style={{ borderColor: COLORS.naturalAluminum, backgroundColor: '#fff' }}
+                    >
+                      <AccordionTrigger className="px-3 py-2 hover:no-underline">
+                        <div className="w-full flex items-center gap-3">
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: pill.dot }}
+                          />
+                          <div className="min-w-0 flex-1 text-left">
+                            <div className="flex items-center gap-2">
+                              <div className="font-medium truncate" style={{ color: COLORS.blackBlue }}>
+                                {app.applicant_name || app.applicant_email}
+                              </div>
+                              <div className="text-xs" style={{ color: COLORS.coolGreyMedium }}>
+                                #{app.id}
+                              </div>
+                            </div>
+                            <div className="text-[11px]" style={{ color: COLORS.coolGreyMedium }}>
+                              {new Date(app.created_at).toLocaleString()}
+                            </div>
                           </div>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">Loading firearm…</div>
-                        )}
-                      </div>
 
-                      {/* Attachments */}
-                      <div className="border rounded p-3 space-y-2">
-                        <div className="font-semibold">Attachments</div>
-
-                        {app.attachments?.length ? (
-                          <ul className="text-sm list-disc ml-5">
-                            {app.attachments.map(a => (
-                              <li key={a}>
-                                <a
-                                  href={getFileUrl(a)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="underline"
-                                >
-                                  {a.split('/').pop()}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">
-                            No documents attached
-                          </div>
-                        )}
-                      </div>
-
-                      {/* CFR Notes */}
-                      <div className="border rounded p-3 space-y-2">
-                        <div className="font-semibold">CFR Notes</div>
-                        <div className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {app.cfr_notes?.trim() ? app.cfr_notes : '-'}
+                          <span
+                            className="text-[11px] px-2 py-1 rounded border"
+                            style={{
+                              backgroundColor: pill.bg,
+                              borderColor: pill.border,
+                              color: pill.fg,
+                              textTransform: 'lowercase',
+                            }}
+                          >
+                            {app.status}
+                          </span>
                         </div>
-                      </div>
+                      </AccordionTrigger>
 
-                      {/* Competency */}
-                      <div className="border rounded p-3 space-y-2">
-                        <div className="font-semibold">Competency</div>
+                      <AccordionContent className="px-3 pb-3 pt-1">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                          {/* meta */}
+                          <div className="rounded-md border bg-white" style={{ borderColor: COLORS.naturalAluminum }}>
+                            <div className="px-3 py-2 border-b text-sm font-semibold" style={{ borderColor: COLORS.naturalAluminum, color: COLORS.blackBlue }}>
+                              Routing
+                            </div>
+                            <div className="px-3 py-2">
+                              {miniRow('Approved by OIC', app.oic_approved_by_email || '-')}
+                              {miniRow('OIC UID', app.oic_approved_by_uid || '-')}
+                              <div className="h-px my-2" style={{ backgroundColor: COLORS.naturalAluminum }} />
+                              {miniRow('Forwarded by CFR', app.cfr_forwarded_by_email || '-')}
+                              {miniRow('CFR UID', app.cfr_forwarded_by_uid || '-')}
+                            </div>
+                          </div>
 
-                        {!app.competency_id ? (
-                          <div className="text-sm text-muted-foreground">No competency attached.</div>
-                        ) : comp ? (
-                          renderCompetency(comp)
-                        ) : (
-                          <div className="text-sm text-muted-foreground">Loading competency…</div>
-                        )}
-                      </div>
+                          {/* applicant */}
+                          <div className="rounded-md border bg-white" style={{ borderColor: COLORS.naturalAluminum }}>
+                            <div className="px-3 py-2 border-b text-sm font-semibold" style={{ borderColor: COLORS.naturalAluminum, color: COLORS.blackBlue }}>
+                              Applicant
+                            </div>
+                            <div className="px-3 py-2">
+                              {miniRow('National ID', app.national_id || '-')}
+                              {miniRow('Phone', app.phone || '-')}
+                              {miniRow('Province', app.province || '-')}
+                              {miniRow('District', app.district || '-')}
+                              <div className="h-px my-2" style={{ backgroundColor: COLORS.naturalAluminum }} />
+                              {miniRow('Address', app.address || '-')}
+                            </div>
+                          </div>
+                        </div>
 
-                      {/* Next */}
-                      <div className="flex justify-end pt-2">
-                        <Button
-                          onClick={() =>
-                            (window.location.href =
-                              `/cfr/dispol/application/add-attachment?appId=${app.id}`)
-                          }
-                        >
-                          Next
-                        </Button>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                )
-              })}
-            </Accordion>
+                        {/* firearm + attachments */}
+                        <div className="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
+                          <div className="rounded-md border bg-white" style={{ borderColor: COLORS.naturalAluminum }}>
+                            <div className="px-3 py-2 border-b text-sm font-semibold" style={{ borderColor: COLORS.naturalAluminum, color: COLORS.blackBlue }}>
+                              Firearm
+                            </div>
+                            <div className="px-3 py-2">
+                              {!app.gun_uid ? (
+                                <div className="text-sm" style={{ color: COLORS.coolGreyMedium }}>
+                                  No firearm linked.
+                                </div>
+                              ) : gun ? (
+                                <>
+                                  {miniRow('Make', gun.make)}
+                                  {miniRow('Model', gun.model)}
+                                  {miniRow('Caliber', gun.caliber || '-')}
+                                  {miniRow('Serial', gun.serial || '-')}
+                                </>
+                              ) : (
+                                <div className="text-sm" style={{ color: COLORS.coolGreyMedium }}>
+                                  Loading firearm…
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="rounded-md border bg-white" style={{ borderColor: COLORS.naturalAluminum }}>
+                            <div className="px-3 py-2 border-b text-sm font-semibold" style={{ borderColor: COLORS.naturalAluminum, color: COLORS.blackBlue }}>
+                              Attachments
+                            </div>
+                            <div className="px-3 py-2">
+                              {app.attachments?.length ? (
+                                <ul className="divide-y" style={{ borderColor: COLORS.naturalAluminum }}>
+                                  {app.attachments.map(a => (
+                                    <li key={a} className="py-2 flex items-center justify-between gap-3">
+                                      <a
+                                        href={getFileUrl(a)}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="truncate underline text-sm"
+                                        style={{ color: COLORS.blackBlue }}
+                                      >
+                                        {a.split('/').pop()}
+                                      </a>
+                                      <span className="text-[11px]" style={{ color: COLORS.coolGreyMedium }}>
+                                        file
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              ) : (
+                                <div className="text-sm" style={{ color: COLORS.coolGreyMedium }}>
+                                  No documents attached.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* CFR notes */}
+                        <div className="mt-3 rounded-md border bg-white" style={{ borderColor: COLORS.naturalAluminum }}>
+                          <div className="px-3 py-2 border-b text-sm font-semibold" style={{ borderColor: COLORS.naturalAluminum, color: COLORS.blackBlue }}>
+                            CFR Notes
+                          </div>
+                          <div className="px-3 py-2 text-sm whitespace-pre-wrap" style={{ color: COLORS.coolGreyMedium }}>
+                            {app.cfr_notes?.trim() ? app.cfr_notes : '-'}
+                          </div>
+                        </div>
+
+                        {/* competency */}
+                        <div className="mt-3">
+                          {!app.competency_id ? (
+                            <div className="rounded-md border bg-white p-3 text-sm" style={{ borderColor: COLORS.naturalAluminum, color: COLORS.coolGreyMedium }}>
+                              No competency attached.
+                            </div>
+                          ) : comp ? (
+                            renderCompetencyCompact(comp)
+                          ) : (
+                            <div className="rounded-md border bg-white p-3 text-sm" style={{ borderColor: COLORS.naturalAluminum, color: COLORS.coolGreyMedium }}>
+                              Loading competency…
+                            </div>
+                          )}
+                        </div>
+
+                        {/* NEXT */}
+                        <div className="flex justify-end pt-3">
+                          <Button
+                            className="h-11 text-base"
+                            style={{ backgroundColor: COLORS.blackBlue, color: COLORS.snowWhite }}
+                            onClick={() => (window.location.href = `/cfr/dispol/application/add-attachment?appId=${app.id}`)}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  )
+                })}
+              </Accordion>
+            )}
           </CardContent>
         </Card>
       </div>

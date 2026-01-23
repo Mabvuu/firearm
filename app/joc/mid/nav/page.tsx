@@ -1,24 +1,54 @@
 // app/joc/mid/nav/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter, usePathname } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { supabase } from '@/lib/supabase/client'
 
-type Profile = { email: string | null }
+type Profile = { role?: string | null; email: string | null }
 
 const FIRST_TIME_GREETING = 'Hi, welcome.'
-const RETURNING_GREETINGS = ['Welcome back.', 'Hello.', 'Hi.', 'Hey.', 'Good to see you.']
+const RETURNING_GREETINGS = [
+  'Welcome back.',
+  'Hi again.',
+  'Hello.',
+  'Hey.',
+  'Good to see you.',
+  'Morning.',
+  'Afternoon.',
+  'Evening.',
+]
 
 function pickGreeting(uid: string) {
-  const key = `nav_greeted_${uid}`
-  if (!localStorage.getItem(key)) {
-    localStorage.setItem(key, '1')
+  const greetedKey = `nav_greeted_${uid}`
+  const lastIdxKey = `nav_greet_idx_${uid}`
+
+  const greeted = localStorage.getItem(greetedKey) === '1'
+  if (!greeted) {
+    localStorage.setItem(greetedKey, '1')
+    localStorage.setItem(lastIdxKey, '-1')
     return FIRST_TIME_GREETING
   }
-  return RETURNING_GREETINGS[Math.floor(Math.random() * RETURNING_GREETINGS.length)]
+
+  const lastIdx = Number(localStorage.getItem(lastIdxKey) ?? '-1')
+  let idx = Math.floor(Math.random() * RETURNING_GREETINGS.length)
+  if (RETURNING_GREETINGS.length > 1 && idx === lastIdx) idx = (idx + 1) % RETURNING_GREETINGS.length
+  localStorage.setItem(lastIdxKey, String(idx))
+  return RETURNING_GREETINGS[idx]
+}
+
+const COLORS = {
+  naturalAluminum: '#D9D8D6',
+  blackBlue: '#212B37',
+  snowWhite: '#FFFEF1',
+  lamar: '#3E5C80',
+  coolGreyMedium: '#ACACAC',
+} as const
+
+const ROLE_LABEL: Record<string, string> = {
+  'joc.mid': 'JOC MID Officer',
 }
 
 export default function NavPage() {
@@ -26,20 +56,43 @@ export default function NavPage() {
   const pathname = usePathname()
 
   const [mounted, setMounted] = useState(false)
+  const [profile, setProfile] = useState<Profile>({ email: null, role: 'joc.mid' })
   const [greeting, setGreeting] = useState('')
-  const [profile, setProfile] = useState<Profile>({ email: null })
+
+  const navLinks = useMemo(
+    () => [
+      { href: '/joc/mid/dashboard', label: 'Home' },
+      { href: '/joc/mid/application', label: 'Applications' },
+      { href: '/joc/mid/reports', label: 'Reports' },
+      { href: '/joc/mid/profile', label: 'Profile' },
+    ],
+    []
+  )
 
   useEffect(() => {
     const init = async () => {
-      const { data } = await supabase.auth.getUser()
-      const user = data.user
+      const { data: userRes } = await supabase.auth.getUser()
+      const user = userRes.user
+
       if (!user) {
+        setMounted(true)
         router.replace('/login')
         return
       }
 
       setGreeting(pickGreeting(user.id))
-      setProfile({ email: user.email ?? null })
+
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('role,email')
+        .eq('auth_uid', user.id)
+        .maybeSingle()
+
+      setProfile({
+        email: prof?.email ?? user.email ?? null,
+        role: prof?.role ?? 'joc.mid',
+      })
+
       setMounted(true)
     }
 
@@ -51,47 +104,69 @@ export default function NavPage() {
     router.push('/login')
   }
 
-  const item = (href: string, label: string) => (
-    <Link href={href}>
-      <Button
-        variant="ghost"
-        className={`w-full justify-start ${pathname === href ? 'bg-muted font-semibold' : ''}`}
-      >
-        {label}
-      </Button>
-    </Link>
-  )
+  const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/')
 
   return (
-    <aside className="h-full p-4 flex flex-col sticky top-0 self-start">
-      {/* replace LOGO */}
-      <div className="mb-6">
+    <aside
+      className="h-screen sticky top-0 self-start flex flex-col p-5 overflow-y-auto"
+      style={{ backgroundColor: COLORS.lamar }}
+    >
+      {/* HEADER */}
+      <div className="mb-8">
         {!mounted ? (
-          <div className="space-y-2">
-            <div className="h-5 w-40 rounded bg-muted" />
-            <div className="h-4 w-48 rounded bg-muted" />
+          <div className="space-y-3">
+            <div className="h-7 w-48 rounded" style={{ backgroundColor: 'rgba(255,254,241,0.25)' }} />
+            <div className="h-4 w-64 rounded" style={{ backgroundColor: 'rgba(255,254,241,0.18)' }} />
           </div>
         ) : (
           <div className="space-y-1">
-            <div className="text-base font-semibold">{greeting}</div>
-            <div className="text-lg font-semibold tracking-wide text-neutral-700">
-              MID OFFICER
+            <div className="text-xl font-semibold leading-tight" style={{ color: COLORS.snowWhite }}>
+              {greeting}
             </div>
-            {profile.email && <div className="text-xs text-muted-foreground">{profile.email}</div>}
+
+            <div className="text-sm leading-snug" style={{ color: COLORS.naturalAluminum }}>
+              <span className="font-medium">
+                {ROLE_LABEL[profile.role ?? 'joc.mid'] ?? 'JOC MID Officer'}
+              </span>
+              {profile.email ? <span> • {profile.email}</span> : null}
+            </div>
           </div>
         )}
       </div>
 
+      {/* NAV */}
       <nav className="flex flex-col gap-2">
-        {item('/joc/mid/dashboard', 'Home')}
-        {item('/joc/mid/application', 'Applications')}
-        {item('/joc/mid/intel', 'Intelligence')}
-        {item('/joc/mid/reports', 'Reports')}
-        {item('/joc/mid/profile', 'Profile')}
+        {navLinks.map(l => {
+          const active = isActive(l.href)
+          return (
+            <Link key={l.href} href={l.href}>
+              <Button
+                variant="ghost"
+                className="w-full justify-start h-11"
+                style={{
+                  backgroundColor: active ? 'rgba(255,254,241,0.14)' : 'transparent',
+                  color: COLORS.snowWhite,
+                  border: active ? `1px solid ${COLORS.naturalAluminum}` : '1px solid transparent',
+                }}
+              >
+                <span className="text-base">{l.label}</span>
+              </Button>
+            </Link>
+          )
+        })}
       </nav>
 
-      <div className="mt-auto pt-6">
-        <Button variant="destructive" className="w-full" onClick={handleLogout}>
+      {/* LOGOUT */}
+      <div className="mt-auto pt-8">
+        <Button
+          className="w-full h-11 text-base"
+          onClick={handleLogout}
+          style={{
+            backgroundColor: COLORS.blackBlue,
+            color: COLORS.snowWhite,
+            border: `1px solid ${COLORS.naturalAluminum}`,
+          }}
+        >
           Logout
         </Button>
       </div>

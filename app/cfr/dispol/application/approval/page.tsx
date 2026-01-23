@@ -9,6 +9,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
+const COLORS = {
+  naturalAluminum: '#D9D8D6',
+  blackBlue: '#212B37',
+  snowWhite: '#FFFEF1',
+  lamar: '#3E5C80',
+  coolGreyMedium: '#ACACAC',
+} as const
+
 type Application = {
   id: number
   applicant_name: string
@@ -33,7 +41,7 @@ export default function DispolApprovalPickPropolPage() {
   const [people, setPeople] = useState<Pick[]>([])
   const [query, setQuery] = useState('')
   const [loadingList, setLoadingList] = useState(false)
-  const [sending, setSending] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState<string | null>(null)
 
   useEffect(() => {
     if (!appId) return
@@ -90,7 +98,7 @@ export default function DispolApprovalPickPropolPage() {
 
   const approveAndSend = async (pick: Pick) => {
     if (!app) return
-    setSending(true)
+    setSendingEmail(pick.email)
     setErrorMsg(null)
 
     const {
@@ -99,7 +107,7 @@ export default function DispolApprovalPickPropolPage() {
     } = await supabase.auth.getUser()
 
     if (userErr || !user?.email || !user.id) {
-      setSending(false)
+      setSendingEmail(null)
       setErrorMsg('Not logged in')
       return
     }
@@ -114,7 +122,7 @@ export default function DispolApprovalPickPropolPage() {
       })
       .eq('id', app.id)
 
-    setSending(false)
+    setSendingEmail(null)
 
     if (error) {
       setErrorMsg(error.message)
@@ -124,26 +132,72 @@ export default function DispolApprovalPickPropolPage() {
     router.push('/cfr/dispol/application')
   }
 
-  if (!app && !errorMsg) return <div className="p-8">Loading…</div>
+  if (!app && !errorMsg) {
+    return (
+      <div className="p-8" style={{ backgroundColor: COLORS.snowWhite, color: COLORS.blackBlue }}>
+        Loading…
+      </div>
+    )
+  }
 
   return (
-    <div className="flex min-h-screen">
-      <div className="w-1/4 border-r">
+    <div className="flex min-h-screen" style={{ backgroundColor: COLORS.snowWhite }}>
+      <div
+        className="w-1/4 min-w-[260px]"
+        style={{ borderRight: `1px solid ${COLORS.naturalAluminum}` }}
+      >
         <NavPage />
       </div>
 
       <div className="w-3/4 p-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Dispol Approval → Choose Province Police (cfr.propol)
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-semibold" style={{ color: COLORS.blackBlue }}>
+              Approval
+            </h1>
+            <p className="mt-1 text-sm" style={{ color: COLORS.lamar }}>
+              Choose Province Police (cfr.propol)
               {app ? ` — ${app.applicant_name} (#${app.id})` : ''}
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="h-10"
+              style={{ borderColor: COLORS.blackBlue, color: COLORS.blackBlue }}
+              onClick={() => router.back()}
+            >
+              Back
+            </Button>
+            <Button
+              variant="outline"
+              className="h-10"
+              style={{ borderColor: COLORS.blackBlue, color: COLORS.blackBlue }}
+              onClick={() => router.push('/cfr/dispol/application')}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+
+        <Card style={{ borderColor: COLORS.naturalAluminum }}>
+          <CardHeader className="border-b" style={{ borderColor: COLORS.naturalAluminum }}>
+            <CardTitle className="text-lg" style={{ color: COLORS.blackBlue }}>
+              Province Police List
             </CardTitle>
           </CardHeader>
 
-          <CardContent className="space-y-4">
+          <CardContent className="pt-4 space-y-4">
             {errorMsg && (
-              <div className="border rounded p-3 text-sm text-red-600">
+              <div
+                className="rounded-md border p-3 text-sm"
+                style={{
+                  borderColor: 'rgba(239,68,68,0.4)',
+                  backgroundColor: 'rgba(239,68,68,0.08)',
+                  color: '#991b1b',
+                }}
+              >
                 {errorMsg}
               </div>
             )}
@@ -154,46 +208,48 @@ export default function DispolApprovalPickPropolPage() {
               onChange={e => setQuery(e.target.value)}
             />
 
-            <div className="border rounded">
-              <div className="max-h-72 overflow-y-auto">
+            <div className="rounded-md border bg-white" style={{ borderColor: COLORS.naturalAluminum }}>
+              <div className="px-3 py-2 border-b" style={{ borderColor: COLORS.naturalAluminum }}>
+                <div className="text-sm font-semibold" style={{ color: COLORS.blackBlue }}>
+                  Results ({filtered.length})
+                </div>
+                <div className="text-[11px]" style={{ color: COLORS.coolGreyMedium }}>
+                  Click “Approve & Send” to forward the application.
+                </div>
+              </div>
+
+              <div className="max-h-80 overflow-y-auto divide-y" style={{ borderColor: COLORS.naturalAluminum }}>
                 {filtered.map(p => (
                   <div
                     key={p.email}
-                    className="p-2 cursor-pointer hover:bg-muted flex items-center justify-between"
-                    onClick={() => approveAndSend(p)}
+                    className="px-3 py-2 flex items-center justify-between gap-3"
                   >
-                    <div>
-                      <div className="font-medium">{p.email}</div>
-                      <div className="text-xs text-muted-foreground">
-                        National ID: {p.national_id} | UID: {p.auth_uid}
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate" style={{ color: COLORS.blackBlue }}>
+                        {p.email}
+                      </div>
+                      <div className="text-[11px]" style={{ color: COLORS.coolGreyMedium }}>
+                        National ID: {p.national_id} • UID: {p.auth_uid}
                       </div>
                     </div>
 
-                    <Button size="sm" disabled={sending}>
-                      {sending ? 'Sending…' : 'Approve & Send'}
+                    <Button
+                      size="sm"
+                      disabled={!!sendingEmail}
+                      onClick={() => approveAndSend(p)}
+                      style={{ backgroundColor: COLORS.blackBlue, color: COLORS.snowWhite }}
+                    >
+                      {sendingEmail === p.email ? 'Sending…' : 'Approve & Send'}
                     </Button>
                   </div>
                 ))}
 
-                {!filtered.length && (
-                  <div className="p-2 text-sm text-muted-foreground">
+                {filtered.length === 0 && (
+                  <div className="px-3 py-3 text-sm" style={{ color: COLORS.coolGreyMedium }}>
                     {loadingList ? 'Loading…' : 'No cfr.propol users found.'}
                   </div>
                 )}
               </div>
-            </div>
-
-            <div className="flex justify-between pt-2">
-              <Button variant="outline" onClick={() => router.back()}>
-                Back
-              </Button>
-
-              <Button
-                variant="outline"
-                onClick={() => router.push('/cfr/dispol/application')}
-              >
-                Cancel
-              </Button>
             </div>
           </CardContent>
         </Card>

@@ -1,7 +1,7 @@
 // app/joc/oic/application/page.tsx
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import NavPage from '../nav/page'
 import { supabase } from '@/lib/supabase/client'
@@ -14,6 +14,9 @@ import {
 } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 type Application = {
   id: number
@@ -50,7 +53,7 @@ type Application = {
   dispol_forwarded_by_email: string | null
   dispol_forwarded_by_uid: string | null
 
-  // propol chain
+  // provincial police chain (stored as propol)
   propol_email: string | null
   propol_notes: string | null
   propol_forwarded_by_email: string | null
@@ -95,15 +98,26 @@ type CompetencyFull = {
 const competencySelect =
   'id, user_id, full_name, national_id, violent_crime_history, violent_crime_details, restraining_orders, restraining_order_details, mental_instability, mental_instability_details, substance_abuse, substance_abuse_details, firearms_training, firearms_training_details, threat_to_self_or_others, threat_details, notes, created_at'
 
-const statusColor = (status: string) => {
+const toLabel = (raw: string) =>
+  raw
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, m => m.toUpperCase())
+    .trim()
+
+const statusBadgeVariant = (
+  status: string
+): 'default' | 'secondary' | 'destructive' | 'outline' => {
   switch (status) {
     case 'sent_to_joc_oic':
-      return 'bg-green-500'
-    case 'returned':
+      return 'secondary'
+    case 'approved_by_joc_oic':
+      return 'default'
     case 'declined':
-      return 'bg-red-500'
+    case 'returned':
+    case 'joc_oic_declined':
+      return 'destructive'
     default:
-      return 'bg-gray-400'
+      return 'outline'
   }
 }
 
@@ -112,22 +126,28 @@ export default function JOCOICApplicationsPage() {
 
   const [apps, setApps] = useState<Application[]>([])
   const [guns, setGuns] = useState<Record<number, Gun | null>>({})
-  const [competencies, setCompetencies] = useState<Record<number, CompetencyFull | null>>(
-    {}
-  )
+  const [competencies, setCompetencies] = useState<Record<number, CompetencyFull | null>>({})
   const [loading, setLoading] = useState(true)
+
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   const requestedGunIds = useRef<Set<number>>(new Set())
   const requestedCompIds = useRef<Set<number>>(new Set())
 
   useEffect(() => {
     const loadApps = async () => {
+      setLoading(true)
+      setErrorMsg(null)
+
       const {
         data: { user },
+        error: userErr,
       } = await supabase.auth.getUser()
 
-      if (!user?.email) {
+      if (userErr || !user?.email) {
         setLoading(false)
+        setErrorMsg('Not logged in')
         return
       }
 
@@ -137,7 +157,8 @@ export default function JOCOICApplicationsPage() {
         .eq('joc_oic_email', user.email)
         .order('created_at', { ascending: false })
 
-      if (!error) setApps((data as Application[]) || [])
+      if (error) setErrorMsg(error.message)
+      setApps((data as Application[]) || [])
       setLoading(false)
     }
 
@@ -185,193 +206,274 @@ export default function JOCOICApplicationsPage() {
     })
   }, [apps])
 
-  const getFileUrl = (path: string) => {
-    const bucket = path.startsWith('applications/')
-      ? 'applications'
-      : 'application-attachments'
-    return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl
-  }
+  // ✅ ALWAYS applications bucket
+  const getFileUrl = (path: string) =>
+    supabase.storage.from('applications').getPublicUrl(path).data.publicUrl
 
-  if (loading) return <div className="p-8">Loading…</div>
+  const filteredApps = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return apps
+    return apps.filter(a =>
+      `${a.id} ${a.applicant_name} ${a.applicant_email} ${a.national_id} ${a.status}`
+        .toLowerCase()
+        .includes(q)
+    )
+  }, [apps, query])
 
   return (
-    <div className="flex min-h-screen">
-      <div className="w-1/4 border-r">
+    <div className="flex min-h-screen bg-muted/20">
+      <aside className="hidden w-72 shrink-0 border-r bg-background md:block">
         <NavPage />
-      </div>
+      </aside>
 
-      <div className="w-3/4 p-8">
-        <Card>
-          <CardHeader>
-            <CardTitle>JOC OIC Inbox</CardTitle>
-          </CardHeader>
+      <main className="flex-1">
+        <div className="mx-auto w-full max-w-6xl p-4 sm:p-6 lg:p-8 space-y-6">
+          {/* Header */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-3xl font-semibold tracking-tight">
+                  Applications
+                </h1>
+                <Badge variant="outline">JOC Officer In Charge</Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Review applications assigned to you and forward after approval.
+              </p>
+            </div>
 
-          <CardContent>
-            <Accordion type="single" collapsible className="space-y-2">
-              {apps.map(app => {
-                const gun = app.gun_uid ? guns[app.gun_uid] : null
-                const comp = app.competency_id ? competencies[app.competency_id] : null
+            <div className="flex items-center gap-3">
+              <Badge variant="secondary">{apps.length} total</Badge>
+              <Badge variant="outline">{filteredApps.length} shown</Badge>
+            </div>
+          </div>
 
-                return (
-                  <AccordionItem key={app.id} value={String(app.id)}>
-                    <AccordionTrigger className="flex items-center gap-3 px-4">
-                      <div className={`w-2 h-8 rounded ${statusColor(app.status)}`} />
-                      <div className="flex-1 text-left">
-                        <div className="font-medium">
-                          {app.applicant_name}{' '}
-                          <span className="text-xs text-muted-foreground"># {app.id}</span>
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Dealer: {app.applicant_email}
-                        </div>
-                      </div>
-                      <Badge variant="outline">{app.status}</Badge>
-                    </AccordionTrigger>
+          <Separator />
 
-                    <AccordionContent className="p-4 space-y-4">
-                      {/* Chain */}
-                      <div className="border rounded p-3 text-sm space-y-2">
-                        <div>
-                          <b>Approved by OIC:</b> {app.oic_approved_by_email || '-'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          OIC UID: {app.oic_approved_by_uid || '-'}
-                        </div>
+          {errorMsg && (
+            <Alert variant="destructive">
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>{errorMsg}</AlertDescription>
+            </Alert>
+          )}
 
-                        <div className="pt-2">
-                          <b>Forwarded by CFR:</b> {app.cfr_forwarded_by_email || '-'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          CFR UID: {app.cfr_forwarded_by_uid || '-'}
-                        </div>
+          <Card className="shadow-sm">
+            <CardHeader className="space-y-3">
+              <CardTitle className="text-base">Inbox</CardTitle>
 
-                        <div className="pt-2">
-                          <b>Forwarded by District (dispol):</b> {app.dispol_forwarded_by_email || '-'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Dispol UID: {app.dispol_forwarded_by_uid || '-'}
-                        </div>
+              <Input
+                placeholder="Search: name, email, national id, status, id…"
+                value={query}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+                  setQuery(e.target.value)
+                }
+                disabled={loading}
+              />
+            </CardHeader>
 
-                        <div className="pt-2">
-                          <b>Forwarded by Province (propol):</b> {app.propol_forwarded_by_email || '-'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Propol UID: {app.propol_forwarded_by_uid || '-'}
-                        </div>
-                      </div>
+            <CardContent className="space-y-3">
+              {loading ? (
+                <div className="text-sm text-muted-foreground p-2">Loading…</div>
+              ) : !filteredApps.length ? (
+                <div className="text-sm text-muted-foreground p-2">
+                  No applications found.
+                </div>
+              ) : (
+                <Accordion type="single" collapsible className="space-y-2">
+                  {filteredApps.map(app => {
+                    const gun = app.gun_uid ? guns[app.gun_uid] : null
+                    const comp = app.competency_id ? competencies[app.competency_id] : null
 
-                      {/* Applicant */}
-                      <div className="border rounded p-3 space-y-2">
-                        <div className="font-semibold">Applicant Details</div>
-                        <div className="grid grid-cols-2 gap-2 text-sm">
-                          <div><b>National ID:</b> {app.national_id}</div>
-                          <div><b>Phone:</b> {app.phone}</div>
-                          <div><b>Address:</b> {app.address}</div>
-                          <div><b>Province:</b> {app.province}</div>
-                          <div><b>District:</b> {app.district}</div>
-                        </div>
-                      </div>
+                    return (
+                      <AccordionItem
+                        key={app.id}
+                        value={String(app.id)}
+                        className="rounded-lg border bg-background px-0"
+                      >
+                        <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                          <div className="flex w-full items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <div className="truncate font-semibold">
+                                  {app.applicant_name}
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  #{app.id}
+                                </span>
+                              </div>
+                              <div className="truncate text-xs text-muted-foreground">
+                                Dealer: {app.applicant_email}
+                              </div>
+                            </div>
 
-                      {/* Firearm */}
-                      <div className="border rounded p-3">
-                        <div className="font-semibold mb-1">Firearm Details</div>
-                        {!app.gun_uid ? (
-                          <div className="text-sm text-muted-foreground">No firearm linked.</div>
-                        ) : gun ? (
-                          <div className="text-sm space-y-1">
-                            <div>Make: {gun.make}</div>
-                            <div>Model: {gun.model}</div>
-                            <div>Caliber: {gun.caliber}</div>
-                            <div>Serial: {gun.serial}</div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <Badge variant={statusBadgeVariant(app.status)}>
+                                {toLabel(app.status)}
+                              </Badge>
+                            </div>
                           </div>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">Loading firearm…</div>
-                        )}
-                      </div>
+                        </AccordionTrigger>
 
-                      {/* Attachments */}
-                      <div className="border rounded p-3 space-y-2">
-                        <div className="font-semibold">Attachments</div>
+                        <AccordionContent className="px-4 pb-4 pt-2 space-y-4">
+                          {/* Chain */}
+                          <div className="rounded-lg border p-4 space-y-2 text-sm">
+                            <div className="font-semibold">Chain</div>
 
-                        {app.attachments?.length ? (
-                          <ul className="text-sm list-disc ml-5">
-                            {app.attachments.map(a => (
-                              <li key={a}>
-                                <a
-                                  href={getFileUrl(a)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="underline"
-                                >
-                                  {a.split('/').pop()}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">No documents attached</div>
-                        )}
-                      </div>
+                            <div>
+                              <b>Approved by OIC:</b> {app.oic_approved_by_email || '-'}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              OIC UID: {app.oic_approved_by_uid || '-'}
+                            </div>
 
-                      {/* Notes (All Roles) */}
-                      <div className="border rounded p-3 space-y-3">
-                        <div className="font-semibold">Notes (All Roles)</div>
+                            <div className="pt-2">
+                              <b>Forwarded by CFR:</b> {app.cfr_forwarded_by_email || '-'}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              CFR UID: {app.cfr_forwarded_by_uid || '-'}
+                            </div>
 
-                        <div className="text-sm">
-                          <b>Competency Notes:</b>
-                          <div className="text-muted-foreground whitespace-pre-wrap">
-                            {comp?.notes?.trim() ? comp.notes : '-'}
+                            <div className="pt-2">
+                              <b>Forwarded by District (Dispol):</b>{' '}
+                              {app.dispol_forwarded_by_email || '-'}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Dispol UID: {app.dispol_forwarded_by_uid || '-'}
+                            </div>
+
+                            <div className="pt-2">
+                              <b>Forwarded by Provincial Police:</b>{' '}
+                              {app.propol_forwarded_by_email || '-'}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              Provincial Police UID: {app.propol_forwarded_by_uid || '-'}
+                            </div>
                           </div>
-                        </div>
 
-                        <div className="text-sm">
-                          <b>CFR Notes:</b>
-                          <div className="text-muted-foreground whitespace-pre-wrap">
-                            {app.cfr_notes?.trim() ? app.cfr_notes : '-'}
+                          {/* Applicant */}
+                          <div className="rounded-lg border p-4 space-y-2">
+                            <div className="font-semibold">Applicant</div>
+                            <div className="grid gap-2 text-sm sm:grid-cols-2">
+                              <div><b>National ID:</b> {app.national_id}</div>
+                              <div><b>Phone:</b> {app.phone}</div>
+                              <div className="sm:col-span-2"><b>Address:</b> {app.address}</div>
+                              <div><b>Province:</b> {app.province}</div>
+                              <div><b>District:</b> {app.district}</div>
+                            </div>
                           </div>
-                        </div>
 
-                        <div className="text-sm">
-                          <b>District Notes (dispol):</b>
-                          <div className="text-muted-foreground whitespace-pre-wrap">
-                            {app.dispol_notes?.trim() ? app.dispol_notes : '-'}
+                          {/* Firearm */}
+                          <div className="rounded-lg border p-4">
+                            <div className="font-semibold mb-2">Firearm</div>
+                            {!app.gun_uid ? (
+                              <div className="text-sm text-muted-foreground">No firearm linked.</div>
+                            ) : gun ? (
+                              <div className="grid gap-2 text-sm sm:grid-cols-2">
+                                <div><b>Make:</b> {gun.make}</div>
+                                <div><b>Model:</b> {gun.model}</div>
+                                <div><b>Caliber:</b> {gun.caliber || '-'}</div>
+                                <div><b>Serial:</b> {gun.serial || '-'}</div>
+                              </div>
+                            ) : (
+                              <div className="text-sm text-muted-foreground">Loading firearm…</div>
+                            )}
                           </div>
-                        </div>
 
-                        <div className="text-sm">
-                          <b>Province Notes (propol):</b>
-                          <div className="text-muted-foreground whitespace-pre-wrap">
-                            {app.propol_notes?.trim() ? app.propol_notes : '-'}
+                          {/* Attachments */}
+                          <div className="rounded-lg border p-4 space-y-2">
+                            <div className="flex items-center justify-between">
+                              <div className="font-semibold">Attachments</div>
+                              <Badge variant="outline">{app.attachments?.length ?? 0}</Badge>
+                            </div>
+
+                            {app.attachments?.length ? (
+                              <ul className="text-sm list-disc ml-5 space-y-1">
+                                {app.attachments.map(a => (
+                                  <li key={a}>
+                                    <a
+                                      href={getFileUrl(a)}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="underline underline-offset-2"
+                                    >
+                                      {a.split('/').pop()}
+                                    </a>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <div className="text-sm text-muted-foreground">
+                                No documents attached
+                              </div>
+                            )}
                           </div>
-                        </div>
-                      </div>
 
-                      {/* Competency */}
-                      <div className="border rounded p-3 space-y-2">
-                        <div className="font-semibold">Competency</div>
-                        {!app.competency_id ? (
-                          <div className="text-sm text-muted-foreground">No competency attached.</div>
-                        ) : comp ? (
-                          <div className="text-sm">{/* reuse the competency UI */}{comp.full_name}</div>
-                        ) : (
-                          <div className="text-sm text-muted-foreground">Loading competency…</div>
-                        )}
-                      </div>
+                          {/* Notes */}
+                          <div className="rounded-lg border p-4 space-y-3">
+                            <div className="font-semibold">Notes (All Roles)</div>
 
-                      {/* Next */}
-                      <div className="flex justify-end pt-2">
-                        <Button onClick={() => router.push(`/joc/oic/application/add-notes?appId=${app.id}`)}>
-                          Next
-                        </Button>
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                )
-              })}
-            </Accordion>
-          </CardContent>
-        </Card>
-      </div>
+                            <div className="text-sm">
+                              <b>Competency Notes:</b>
+                              <div className="text-muted-foreground whitespace-pre-wrap">
+                                {comp?.notes?.trim() ? comp.notes : '-'}
+                              </div>
+                            </div>
+
+                            <div className="text-sm">
+                              <b>CFR Notes:</b>
+                              <div className="text-muted-foreground whitespace-pre-wrap">
+                                {app.cfr_notes?.trim() ? app.cfr_notes : '-'}
+                              </div>
+                            </div>
+
+                            <div className="text-sm">
+                              <b>District Notes (Dispol):</b>
+                              <div className="text-muted-foreground whitespace-pre-wrap">
+                                {app.dispol_notes?.trim() ? app.dispol_notes : '-'}
+                              </div>
+                            </div>
+
+                            <div className="text-sm">
+                              <b>Provincial Police Notes:</b>
+                              <div className="text-muted-foreground whitespace-pre-wrap">
+                                {app.propol_notes?.trim() ? app.propol_notes : '-'}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                            <Button
+                              variant="outline"
+                              onClick={() =>
+                                router.push(`/joc/oic/application/add-notes?appId=${app.id}`)
+                              }
+                            >
+                              Add Notes / Attachments
+                            </Button>
+
+                            <Button
+                              onClick={() =>
+                                router.push(`/joc/oic/application/add-notes?appId=${app.id}`)
+                              }
+                            >
+                              Next
+                            </Button>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    )
+                  })}
+                </Accordion>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="md:hidden rounded-lg border bg-background p-4 text-sm text-muted-foreground">
+            Tip: Use a wider screen to see the sidebar navigation.
+          </div>
+        </div>
+      </main>
     </div>
   )
 }
