@@ -1,7 +1,7 @@
 // app/police/oic/application/approval/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import NavPage from '../../nav/page'
 import { supabase } from '@/lib/supabase/client'
@@ -29,7 +29,7 @@ type CFRPick = {
   auth_uid: string
 }
 
-export default function OICApprovalPage() {
+function OICApprovalPageInner() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const appId = Number(searchParams.get('appId'))
@@ -57,7 +57,7 @@ export default function OICApprovalPage() {
         return
       }
 
-      setApp(data as Application)
+      setApp((data as Application) ?? null)
     }
 
     loadApp()
@@ -140,12 +140,14 @@ export default function OICApprovalPage() {
 
   return (
     <div className="flex min-h-screen" style={{ backgroundColor: COLORS.snowWhite }}>
-      <div className="w-1/4 min-w-[260px]" style={{ borderRight: `1px solid ${COLORS.naturalAluminum}` }}>
+      <div
+        className="w-1/4 min-w-[260px]"
+        style={{ borderRight: `1px solid ${COLORS.naturalAluminum}` }}
+      >
         <NavPage />
       </div>
 
       <div className="w-3/4 p-8">
-        {/* compact header */}
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h1 className="text-3xl font-semibold" style={{ color: COLORS.blackBlue }}>
@@ -188,7 +190,11 @@ export default function OICApprovalPage() {
             {errorMsg && (
               <div
                 className="rounded-md border p-3 text-sm"
-                style={{ borderColor: 'rgba(239,68,68,0.35)', color: '#b91c1c', backgroundColor: 'rgba(239,68,68,0.06)' }}
+                style={{
+                  borderColor: 'rgba(239,68,68,0.35)',
+                  color: '#b91c1c',
+                  backgroundColor: 'rgba(239,68,68,0.06)',
+                }}
               >
                 {errorMsg}
               </div>
@@ -201,8 +207,10 @@ export default function OICApprovalPage() {
               onChange={e => setQuery(e.target.value)}
             />
 
-            {/* file-like list */}
-            <div className="rounded-md border bg-white" style={{ borderColor: COLORS.naturalAluminum }}>
+            <div
+              className="rounded-md border bg-white"
+              style={{ borderColor: COLORS.naturalAluminum }}
+            >
               <div className="max-h-80 overflow-y-auto">
                 {loadingCfr ? (
                   <div className="p-3 text-sm" style={{ color: COLORS.coolGreyMedium }}>
@@ -231,10 +239,7 @@ export default function OICApprovalPage() {
                             size="sm"
                             className="h-9"
                             disabled={!!sendingTo}
-                            style={{
-                              backgroundColor: COLORS.blackBlue,
-                              color: COLORS.snowWhite,
-                            }}
+                            style={{ backgroundColor: COLORS.blackBlue, color: COLORS.snowWhite }}
                           >
                             {sendingTo === c.email ? 'Sending…' : 'Send'}
                           </Button>
@@ -253,5 +258,13 @@ export default function OICApprovalPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function OICApprovalPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <OICApprovalPageInner />
+    </Suspense>
   )
 }

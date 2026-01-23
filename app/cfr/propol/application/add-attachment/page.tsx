@@ -1,7 +1,7 @@
 // app/cfr/propol/application/add-attachment/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import NavPage from '../../nav/page'
 import { supabase } from '@/lib/supabase/client'
@@ -43,7 +43,7 @@ const statusBadgeVariant = (
   }
 }
 
-export default function PropolAddAttachmentPage() {
+function PropolAddAttachmentPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const appId = Number(searchParams.get('appId'))
@@ -82,7 +82,6 @@ export default function PropolAddAttachmentPage() {
     load()
   }, [appId])
 
-  // ✅ BUCKET = applications (ONLY)
   const getFileUrl = (path: string) => {
     return supabase.storage.from('applications').getPublicUrl(path).data.publicUrl
   }
@@ -106,13 +105,11 @@ export default function PropolAddAttachmentPage() {
     try {
       for (const file of list) {
         const safeName = file.name.replace(/[^\w.\- ]+/g, '_')
-        // store inside applications bucket
         const path = `applications/${app.id}/propol/${crypto.randomUUID()}-${safeName}`
 
-        // ✅ upload to applications bucket
-        const { error: upErr } = await supabase.storage
-          .from('applications')
-          .upload(path, file, { upsert: false })
+        const { error: upErr } = await supabase.storage.from('applications').upload(path, file, {
+          upsert: false,
+        })
 
         if (upErr) throw new Error(upErr.message)
 
@@ -121,10 +118,7 @@ export default function PropolAddAttachmentPage() {
 
       const updated = [...(app.attachments ?? []), ...uploaded]
 
-      const { error: dbErr } = await supabase
-        .from('applications')
-        .update({ attachments: updated })
-        .eq('id', app.id)
+      const { error: dbErr } = await supabase.from('applications').update({ attachments: updated }).eq('id', app.id)
 
       if (dbErr) throw new Error(dbErr.message)
 
@@ -147,14 +141,9 @@ export default function PropolAddAttachmentPage() {
     try {
       const updated = (app.attachments ?? []).filter(a => a !== path)
 
-      const { error: dbErr } = await supabase
-        .from('applications')
-        .update({ attachments: updated })
-        .eq('id', app.id)
-
+      const { error: dbErr } = await supabase.from('applications').update({ attachments: updated }).eq('id', app.id)
       if (dbErr) throw new Error(dbErr.message)
 
-      // ✅ remove from applications bucket
       await supabase.storage.from('applications').remove([path])
 
       setApp({ ...app, attachments: updated })
@@ -172,10 +161,7 @@ export default function PropolAddAttachmentPage() {
     setSuccessMsg(null)
     setSaving(true)
 
-    const { error } = await supabase
-      .from('applications')
-      .update({ propol_notes: notes })
-      .eq('id', app.id)
+    const { error } = await supabase.from('applications').update({ propol_notes: notes }).eq('id', app.id)
 
     setSaving(false)
 
@@ -194,10 +180,7 @@ export default function PropolAddAttachmentPage() {
     setSuccessMsg(null)
     setActing(true)
 
-    const { error } = await supabase
-      .from('applications')
-      .update({ status: 'propol_declined' })
-      .eq('id', app.id)
+    const { error } = await supabase.from('applications').update({ status: 'propol_declined' }).eq('id', app.id)
 
     setActing(false)
 
@@ -215,10 +198,7 @@ export default function PropolAddAttachmentPage() {
     setSuccessMsg(null)
     setActing(true)
 
-    const { error } = await supabase
-      .from('applications')
-      .update({ status: 'approved_by_propol' })
-      .eq('id', app.id)
+    const { error } = await supabase.from('applications').update({ status: 'approved_by_propol' }).eq('id', app.id)
 
     setActing(false)
 
@@ -228,6 +208,23 @@ export default function PropolAddAttachmentPage() {
     }
 
     router.push(`/cfr/propol/application/approval?appId=${app.id}`)
+  }
+
+  if (!appId) {
+    return (
+      <div className="flex min-h-screen bg-muted/20">
+        <aside className="hidden w-72 shrink-0 border-r bg-background md:block">
+          <NavPage />
+        </aside>
+        <main className="flex-1">
+          <div className="mx-auto w-full max-w-5xl p-6 lg:p-8">
+            <div className="rounded-lg border bg-background p-6 text-sm text-muted-foreground">
+              Missing appId in URL.
+            </div>
+          </div>
+        </main>
+      </div>
+    )
   }
 
   if (!app) {
@@ -258,9 +255,7 @@ export default function PropolAddAttachmentPage() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold tracking-tight">
-                  Province Review
-                </h1>
+                <h1 className="text-2xl font-semibold tracking-tight">Province Review</h1>
                 <Badge variant={statusBadgeVariant(app.status)} className="capitalize">
                   {toLabel(app.status)}
                 </Badge>
@@ -298,7 +293,6 @@ export default function PropolAddAttachmentPage() {
             </CardHeader>
 
             <CardContent className="space-y-6">
-              {/* Upload */}
               <div className="rounded-lg border bg-background p-4 space-y-3">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div className="space-y-0.5">
@@ -323,10 +317,7 @@ export default function PropolAddAttachmentPage() {
                 {filesOnly.length ? (
                   <div className="grid gap-2 sm:grid-cols-2">
                     {filesOnly.map(a => (
-                      <div
-                        key={a}
-                        className="flex items-start justify-between gap-3 rounded-md border p-3"
-                      >
+                      <div key={a} className="flex items-start justify-between gap-3 rounded-md border p-3">
                         <div className="min-w-0">
                           <a
                             href={getFileUrl(a)}
@@ -365,13 +356,10 @@ export default function PropolAddAttachmentPage() {
                 )}
               </div>
 
-              {/* Notes */}
               <div className="rounded-lg border bg-background p-4 space-y-3">
                 <div className="space-y-0.5">
                   <div className="text-sm font-semibold">Province notes</div>
-                  <div className="text-xs text-muted-foreground">
-                    Keep notes short and factual.
-                  </div>
+                  <div className="text-xs text-muted-foreground">Keep notes short and factual.</div>
                 </div>
 
                 <textarea
@@ -387,12 +375,7 @@ export default function PropolAddAttachmentPage() {
                     Saved notes will appear in the full application view.
                   </div>
                   <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={saveNotes}
-                      disabled={saving || acting}
-                    >
+                    <Button size="sm" variant="outline" onClick={saveNotes} disabled={saving || acting}>
                       {saving ? 'Saving…' : 'Save Notes'}
                     </Button>
                     <Button
@@ -407,7 +390,6 @@ export default function PropolAddAttachmentPage() {
                 </div>
               </div>
 
-              {/* Bottom actions */}
               <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
                 <Button
                   variant="outline"
@@ -425,5 +407,13 @@ export default function PropolAddAttachmentPage() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function PropolAddAttachmentPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Loading…</div>}>
+      <PropolAddAttachmentPageInner />
+    </Suspense>
   )
 }

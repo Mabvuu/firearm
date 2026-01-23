@@ -1,7 +1,7 @@
 // app/joc/oic/application/add-notes/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import NavPage from '../../nav/page'
 import { supabase } from '@/lib/supabase/client'
@@ -20,7 +20,7 @@ type Application = {
   status: string
 }
 
-export default function JOCOICAddNotesPage() {
+function JOCOICAddNotesPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -63,7 +63,6 @@ export default function JOCOICAddNotesPage() {
     load()
   }, [appId, missingAppId])
 
-  // ✅ ALWAYS applications bucket
   const getFileUrl = (path: string) =>
     supabase.storage.from('applications').getPublicUrl(path).data.publicUrl
 
@@ -88,9 +87,9 @@ export default function JOCOICAddNotesPage() {
         const safeName = file.name.replace(/[^\w.\- ]+/g, '_')
         const path = `applications/${app.id}/joc-oic/${crypto.randomUUID()}-${safeName}`
 
-        const { error } = await supabase.storage
-          .from('applications')
-          .upload(path, file, { upsert: false })
+        const { error } = await supabase.storage.from('applications').upload(path, file, {
+          upsert: false,
+        })
 
         if (error) throw new Error(error.message)
 
@@ -99,10 +98,7 @@ export default function JOCOICAddNotesPage() {
 
       const updated = [...(app.attachments ?? []), ...uploaded]
 
-      const { error } = await supabase
-        .from('applications')
-        .update({ attachments: updated })
-        .eq('id', app.id)
+      const { error } = await supabase.from('applications').update({ attachments: updated }).eq('id', app.id)
 
       if (error) throw new Error(error.message)
 
@@ -121,10 +117,7 @@ export default function JOCOICAddNotesPage() {
     setErrorMsg(null)
     setSuccessMsg(null)
 
-    const { error } = await supabase
-      .from('applications')
-      .update({ joc_oic_notes: notes })
-      .eq('id', app.id)
+    const { error } = await supabase.from('applications').update({ joc_oic_notes: notes }).eq('id', app.id)
 
     setSaving(false)
 
@@ -143,10 +136,7 @@ export default function JOCOICAddNotesPage() {
     setErrorMsg(null)
     setSuccessMsg(null)
 
-    const { error } = await supabase
-      .from('applications')
-      .update({ status: 'joc_oic_declined' })
-      .eq('id', app.id)
+    const { error } = await supabase.from('applications').update({ status: 'joc_oic_declined' }).eq('id', app.id)
 
     setActing(false)
 
@@ -164,10 +154,7 @@ export default function JOCOICAddNotesPage() {
     setErrorMsg(null)
     setSuccessMsg(null)
 
-    const { error } = await supabase
-      .from('applications')
-      .update({ status: 'approved_by_joc_oic' })
-      .eq('id', app.id)
+    const { error } = await supabase.from('applications').update({ status: 'approved_by_joc_oic' }).eq('id', app.id)
 
     setActing(false)
 
@@ -190,13 +177,10 @@ export default function JOCOICAddNotesPage() {
 
       <main className="flex-1">
         <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8 space-y-6">
-          {/* Header */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-3xl font-semibold tracking-tight">
-                  Review Application
-                </h1>
+                <h1 className="text-3xl font-semibold tracking-tight">Review Application</h1>
                 <Badge variant="outline">JOC Officer In Charge</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
@@ -235,7 +219,6 @@ export default function JOCOICAddNotesPage() {
             </CardHeader>
 
             <CardContent className="space-y-6">
-              {/* Attachments */}
               <div className="rounded-lg border bg-background p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-semibold">Add attachments</div>
@@ -272,7 +255,6 @@ export default function JOCOICAddNotesPage() {
                 )}
               </div>
 
-              {/* Notes */}
               <div className="rounded-lg border bg-background p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="text-sm font-semibold">Notes</div>
@@ -283,28 +265,16 @@ export default function JOCOICAddNotesPage() {
                   className="w-full min-h-[180px] rounded-md border bg-background p-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   placeholder="Write a clear note (facts only)…"
                   value={notes}
-                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                    setNotes(e.target.value)
-                  }
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNotes(e.target.value)}
                   disabled={acting}
                 />
 
                 <div className="flex justify-end gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={saveNotes}
-                    disabled={saving || acting}
-                  >
+                  <Button size="sm" variant="outline" onClick={saveNotes} disabled={saving || acting}>
                     {saving ? 'Saving…' : 'Save Notes'}
                   </Button>
 
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={decline}
-                    disabled={acting}
-                  >
+                  <Button size="sm" variant="destructive" onClick={decline} disabled={acting}>
                     {acting ? 'Working…' : 'Decline'}
                   </Button>
                 </div>
@@ -322,5 +292,13 @@ export default function JOCOICAddNotesPage() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function JOCOICAddNotesPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <JOCOICAddNotesPageInner />
+    </Suspense>
   )
 }

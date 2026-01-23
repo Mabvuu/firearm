@@ -1,7 +1,7 @@
 // app/cfr/cfr/application/district/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import NavPage from '../../nav/page'
 import { supabase } from '@/lib/supabase/client'
@@ -22,7 +22,7 @@ type Pick = {
   auth_uid: string
 }
 
-export default function CFRDistrictPickPage() {
+function CFRDistrictPickPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const appId = Number(searchParams.get('appId'))
@@ -61,7 +61,6 @@ export default function CFRDistrictPickPage() {
       setLoadingList(true)
       setErrorMsg(null)
 
-      // ✅ THIS IS THE ROLE YOU SAID: cfr.dispol
       const { data, error } = await supabase
         .from('profiles')
         .select('email, national_id, auth_uid')
@@ -105,7 +104,6 @@ export default function CFRDistrictPickPage() {
       return
     }
 
-    // requires columns: dispol_email, cfr_forwarded_by_email, cfr_forwarded_by_uid
     const { error } = await supabase
       .from('applications')
       .update({
@@ -124,6 +122,10 @@ export default function CFRDistrictPickPage() {
     }
 
     router.push('/cfr/cfr/application')
+  }
+
+  if (!appId) {
+    return <div className="p-8">Missing appId in URL.</div>
   }
 
   if (!app && !errorMsg) return <div className="p-8">Loading…</div>
@@ -195,5 +197,13 @@ export default function CFRDistrictPickPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function CFRDistrictPickPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <CFRDistrictPickPageInner />
+    </Suspense>
   )
 }

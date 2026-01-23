@@ -1,7 +1,7 @@
 // app/police/firearmofficer/application/competency/page.tsx
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import NavPage from '../../nav/page'
@@ -50,7 +50,7 @@ type CompetencyFull = {
 const competencySelect =
   'id, user_id, full_name, national_id, violent_crime_history, violent_crime_details, restraining_orders, restraining_order_details, mental_instability, mental_instability_details, substance_abuse, substance_abuse_details, firearms_training, firearms_training_details, threat_to_self_or_others, threat_details, notes, created_at'
 
-export default function ApplicationCompetencyPage() {
+function ApplicationCompetencyPageInner() {
   const searchParams = useSearchParams()
   const appId = Number(searchParams.get('appId'))
 
@@ -66,18 +66,22 @@ export default function ApplicationCompetencyPage() {
   useEffect(() => {
     if (!appId) return
 
-    supabase
-      .from('applications')
-      .select('id, applicant_name, national_id, competency_id')
-      .eq('id', appId)
-      .single()
-      .then(({ data, error }) => {
-        if (error) {
-          alert(error.message)
-          return
-        }
-        setApp((data as Application) ?? null)
-      })
+    const loadApp = async () => {
+      const { data, error } = await supabase
+        .from('applications')
+        .select('id, applicant_name, national_id, competency_id')
+        .eq('id', appId)
+        .single()
+
+      if (error) {
+        alert(error.message)
+        return
+      }
+
+      setApp((data as Application) ?? null)
+    }
+
+    loadApp()
   }, [appId])
 
   useEffect(() => {
@@ -87,18 +91,22 @@ export default function ApplicationCompetencyPage() {
     if (requestedCompetencyIds.current.has(competencyId)) return
     requestedCompetencyIds.current.add(competencyId)
 
-    supabase
-      .from('competency')
-      .select(competencySelect)
-      .eq('id', competencyId)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (error) {
-          alert(error.message)
-          return
-        }
-        setAttached((data as CompetencyFull) ?? null)
-      })
+    const loadAttached = async () => {
+      const { data, error } = await supabase
+        .from('competency')
+        .select(competencySelect)
+        .eq('id', competencyId)
+        .maybeSingle()
+
+      if (error) {
+        alert(error.message)
+        return
+      }
+
+      setAttached((data as CompetencyFull) ?? null)
+    }
+
+    loadAttached()
   }, [app?.competency_id])
 
   const searchCompetency = async () => {
@@ -176,8 +184,16 @@ export default function ApplicationCompetencyPage() {
           variant={ok ? 'destructive' : 'outline'}
           style={
             ok
-              ? { backgroundColor: COLORS.blackBlue, color: COLORS.snowWhite, borderColor: COLORS.blackBlue }
-              : { borderColor: COLORS.naturalAluminum, color: COLORS.blackBlue, backgroundColor: '#fff' }
+              ? {
+                  backgroundColor: COLORS.blackBlue,
+                  color: COLORS.snowWhite,
+                  borderColor: COLORS.blackBlue,
+                }
+              : {
+                  borderColor: COLORS.naturalAluminum,
+                  color: COLORS.blackBlue,
+                  backgroundColor: '#fff',
+                }
           }
         >
           {ok ? 'Yes' : 'No'}
@@ -191,6 +207,13 @@ export default function ApplicationCompetencyPage() {
       )}
     </div>
   )
+
+  if (!appId)
+    return (
+      <div className="p-8" style={{ backgroundColor: COLORS.snowWhite, color: COLORS.blackBlue }}>
+        Missing appId
+      </div>
+    )
 
   if (!app)
     return (
@@ -351,5 +374,13 @@ export default function ApplicationCompetencyPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function ApplicationCompetencyPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <ApplicationCompetencyPageInner />
+    </Suspense>
   )
 }

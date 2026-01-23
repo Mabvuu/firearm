@@ -1,22 +1,27 @@
-// app/cfr/propol/application/approval/page.tsx
+// app/cfr/dispol/application/approval/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import NavPage from '../../nav/page'
 import { supabase } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+
+const COLORS = {
+  naturalAluminum: '#D9D8D6',
+  blackBlue: '#212B37',
+  snowWhite: '#FFFEF1',
+  lamar: '#3E5C80',
+  coolGreyMedium: '#ACACAC',
+} as const
 
 type Application = {
   id: number
   applicant_name: string
   status: string
-  joc_oic_email: string | null
+  propol_email: string | null
 }
 
 type Pick = {
@@ -25,64 +30,28 @@ type Pick = {
   auth_uid: string
 }
 
-const toLabel = (raw: string) =>
-  raw
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, m => m.toUpperCase())
-    .trim()
-
-const statusBadgeVariant = (
-  status: string
-): 'default' | 'secondary' | 'destructive' | 'outline' => {
-  switch (status) {
-    case 'approved_by_propol':
-      return 'default'
-    case 'sent_to_joc_oic':
-      return 'secondary'
-    case 'propol_declined':
-    case 'declined':
-    case 'returned':
-      return 'destructive'
-    default:
-      return 'outline'
-  }
-}
-
-export default function PropolApprovalPickJocOicPage() {
+function DispolApprovalPickPropolPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
-
-  // IMPORTANT: don't setState in effects for missing appId (eslint rule)
-  const appIdRaw = searchParams.get('appId')
-  const appId = Number(appIdRaw)
-  const missingAppId = !appIdRaw || Number.isNaN(appId) || appId <= 0
+  const appId = Number(searchParams.get('appId'))
 
   const [app, setApp] = useState<Application | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
   const [people, setPeople] = useState<Pick[]>([])
   const [query, setQuery] = useState('')
-
-  const [loadingApp, setLoadingApp] = useState(false)
   const [loadingList, setLoadingList] = useState(false)
+  const [sendingEmail, setSendingEmail] = useState<string | null>(null)
 
-  const [sendingTo, setSendingTo] = useState<string | null>(null)
-  const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  const [successMsg, setSuccessMsg] = useState<string | null>(null)
-
-  // Fetch app only if appId is valid
   useEffect(() => {
-    if (missingAppId) return
+    if (!appId) return
 
     const load = async () => {
-      setLoadingApp(true)
-      setErrorMsg(null)
-
       const { data, error } = await supabase
         .from('applications')
-        .select('id, applicant_name, status, joc_oic_email')
+        .select('id, applicant_name, status, propol_email')
         .eq('id', appId)
         .single()
-
-      setLoadingApp(false)
 
       if (error) {
         setErrorMsg(error.message)
@@ -93,9 +62,8 @@ export default function PropolApprovalPickJocOicPage() {
     }
 
     load()
-  }, [appId, missingAppId])
+  }, [appId])
 
-  // Load people list
   useEffect(() => {
     const loadPeople = async () => {
       setLoadingList(true)
@@ -104,7 +72,7 @@ export default function PropolApprovalPickJocOicPage() {
       const { data, error } = await supabase
         .from('profiles')
         .select('email, national_id, auth_uid')
-        .eq('role', 'joc.oic')
+        .eq('role', 'cfr.propol')
         .order('created_at', { ascending: false })
 
       setLoadingList(false)
@@ -120,10 +88,6 @@ export default function PropolApprovalPickJocOicPage() {
     loadPeople()
   }, [])
 
-  // Derived (no effect, no setState) error display for missing appId
-  const derivedError = missingAppId ? 'Missing appId' : null
-  const displayError = errorMsg ?? derivedError
-
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return people
@@ -132,12 +96,10 @@ export default function PropolApprovalPickJocOicPage() {
     )
   }, [people, query])
 
-  const sendToJocOic = async (pick: Pick) => {
+  const approveAndSend = async (pick: Pick) => {
     if (!app) return
-
-    setSendingTo(pick.email)
+    setSendingEmail(pick.email)
     setErrorMsg(null)
-    setSuccessMsg(null)
 
     const {
       data: { user },
@@ -145,7 +107,7 @@ export default function PropolApprovalPickJocOicPage() {
     } = await supabase.auth.getUser()
 
     if (userErr || !user?.email || !user.id) {
-      setSendingTo(null)
+      setSendingEmail(null)
       setErrorMsg('Not logged in')
       return
     }
@@ -153,159 +115,158 @@ export default function PropolApprovalPickJocOicPage() {
     const { error } = await supabase
       .from('applications')
       .update({
-        status: 'sent_to_joc_oic',
-        joc_oic_email: pick.email,
-        propol_forwarded_by_email: user.email,
-        propol_forwarded_by_uid: user.id,
+        status: 'sent_to_propol',
+        propol_email: pick.email,
+        dispol_forwarded_by_email: user.email,
+        dispol_forwarded_by_uid: user.id,
       })
       .eq('id', app.id)
 
-    setSendingTo(null)
+    setSendingEmail(null)
 
     if (error) {
       setErrorMsg(error.message)
       return
     }
 
-    setSuccessMsg(`Sent to ${pick.email}.`)
-    router.push('/cfr/propol/application')
+    router.push('/cfr/dispol/application')
   }
 
-  const busy = loadingApp || loadingList
+  if (!appId) {
+    return (
+      <div className="p-8" style={{ backgroundColor: COLORS.snowWhite, color: COLORS.blackBlue }}>
+        Missing appId in URL.
+      </div>
+    )
+  }
+
+  if (!app && !errorMsg) {
+    return (
+      <div className="p-8" style={{ backgroundColor: COLORS.snowWhite, color: COLORS.blackBlue }}>
+        Loading…
+      </div>
+    )
+  }
 
   return (
-    <div className="flex min-h-screen bg-muted/20">
-      <aside className="hidden w-72 shrink-0 border-r bg-background md:block">
+    <div className="flex min-h-screen" style={{ backgroundColor: COLORS.snowWhite }}>
+      <div
+        className="w-1/4 min-w-[260px]"
+        style={{ borderRight: `1px solid ${COLORS.naturalAluminum}` }}
+      >
         <NavPage />
-      </aside>
+      </div>
 
-      <main className="flex-1">
-        <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8 space-y-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-semibold tracking-tight">
-                  Province Approval
-                </h1>
-                <Badge variant="outline">Assign JOC OIC</Badge>
-                {app?.status ? (
-                  <Badge
-                    variant={statusBadgeVariant(app.status)}
-                    className="capitalize"
-                  >
-                    {toLabel(app.status)}
-                  </Badge>
-                ) : null}
-              </div>
-
-              <p className="text-sm text-muted-foreground">
-                {missingAppId
-                  ? 'Missing appId in URL.'
-                  : app
-                  ? `${app.applicant_name} — #${app.id}${
-                      app.joc_oic_email ? ` • Current: ${app.joc_oic_email}` : ''
-                    }`
-                  : busy
-                  ? 'Loading application…'
-                  : 'Application not found.'}
-              </p>
-            </div>
-
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => router.back()} disabled={busy}>
-                Back
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => router.push('/cfr/propol/application')}
-                disabled={busy}
-              >
-                Cancel
-              </Button>
-            </div>
+      <div className="w-3/4 p-8">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-3xl font-semibold" style={{ color: COLORS.blackBlue }}>
+              Approval
+            </h1>
+            <p className="mt-1 text-sm" style={{ color: COLORS.lamar }}>
+              Choose Province Police (cfr.propol)
+              {app ? ` — ${app.applicant_name} (#${app.id})` : ''}
+            </p>
           </div>
 
-          {(displayError || successMsg) && (
-            <Alert variant={displayError ? 'destructive' : 'default'}>
-              <AlertTitle>{displayError ? 'Error' : 'Done'}</AlertTitle>
-              <AlertDescription>{displayError ?? successMsg}</AlertDescription>
-            </Alert>
-          )}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="h-10"
+              style={{ borderColor: COLORS.blackBlue, color: COLORS.blackBlue }}
+              onClick={() => router.back()}
+            >
+              Back
+            </Button>
+            <Button
+              variant="outline"
+              className="h-10"
+              style={{ borderColor: COLORS.blackBlue, color: COLORS.blackBlue }}
+              onClick={() => router.push('/cfr/dispol/application')}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
 
-          <Card className="shadow-sm">
-            <CardHeader className="space-y-2">
-              <CardTitle className="text-base">Select an OIC (joc.oic)</CardTitle>
-              <Separator />
-            </CardHeader>
+        <Card style={{ borderColor: COLORS.naturalAluminum }}>
+          <CardHeader className="border-b" style={{ borderColor: COLORS.naturalAluminum }}>
+            <CardTitle className="text-lg" style={{ color: COLORS.blackBlue }}>
+              Province Police List
+            </CardTitle>
+          </CardHeader>
 
-            <CardContent className="space-y-4">
-              <Input
-                placeholder="Search: email, national id, uid…"
-                value={query}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                  setQuery(e.target.value)
-                }
-                disabled={loadingList || missingAppId}
-              />
+          <CardContent className="pt-4 space-y-4">
+            {errorMsg && (
+              <div
+                className="rounded-md border p-3 text-sm"
+                style={{
+                  borderColor: 'rgba(239,68,68,0.4)',
+                  backgroundColor: 'rgba(239,68,68,0.08)',
+                  color: '#991b1b',
+                }}
+              >
+                {errorMsg}
+              </div>
+            )}
 
-              <div className="rounded-lg border bg-background">
-                <div className="max-h-[420px] overflow-y-auto">
-                  {loadingList ? (
-                    <div className="p-4 text-sm text-muted-foreground">Loading users…</div>
-                  ) : filtered.length ? (
-                    <div className="divide-y">
-                      {filtered.map(p => {
-                        const isSending = sendingTo === p.email
-                        return (
-                          <div
-                            key={p.email}
-                            className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between hover:bg-muted/30"
-                          >
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-semibold">{p.email}</div>
-                              <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                                <span className="rounded-md border px-2 py-0.5">
-                                  National ID: {p.national_id || '-'}
-                                </span>
-                                <span className="rounded-md border px-2 py-0.5">
-                                  UID: {p.auth_uid || '-'}
-                                </span>
-                              </div>
-                            </div>
+            <Input
+              placeholder="Search (email / national id)"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+            />
 
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                onClick={() => sendToJocOic(p)}
-                                disabled={!!sendingTo || !app || missingAppId}
-                              >
-                                {isSending ? 'Sending…' : 'Assign & Send'}
-                              </Button>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <div className="p-4 text-sm text-muted-foreground">
-                      No joc.oic users found.
-                    </div>
-                  )}
+            <div className="rounded-md border bg-white" style={{ borderColor: COLORS.naturalAluminum }}>
+              <div className="px-3 py-2 border-b" style={{ borderColor: COLORS.naturalAluminum }}>
+                <div className="text-sm font-semibold" style={{ color: COLORS.blackBlue }}>
+                  Results ({filtered.length})
+                </div>
+                <div className="text-[11px]" style={{ color: COLORS.coolGreyMedium }}>
+                  Click “Approve & Send” to forward the application.
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <div>{loadingList ? '—' : `Showing ${filtered.length} of ${people.length}`}</div>
-                <div>Click “Assign & Send” to forward the application.</div>
-              </div>
-            </CardContent>
-          </Card>
+              <div className="max-h-80 overflow-y-auto divide-y" style={{ borderColor: COLORS.naturalAluminum }}>
+                {filtered.map(p => (
+                  <div key={p.email} className="px-3 py-2 flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate" style={{ color: COLORS.blackBlue }}>
+                        {p.email}
+                      </div>
+                      <div className="text-[11px]" style={{ color: COLORS.coolGreyMedium }}>
+                        National ID: {p.national_id} • UID: {p.auth_uid}
+                      </div>
+                    </div>
 
-          <div className="md:hidden rounded-lg border bg-background p-4 text-sm text-muted-foreground">
-            Tip: Use a wider screen to see the sidebar navigation.
-          </div>
-        </div>
-      </main>
+                    <Button
+                      size="sm"
+                      disabled={!!sendingEmail}
+                      onClick={() => approveAndSend(p)}
+                      style={{ backgroundColor: COLORS.blackBlue, color: COLORS.snowWhite }}
+                    >
+                      {sendingEmail === p.email ? 'Sending…' : 'Approve & Send'}
+                    </Button>
+                  </div>
+                ))}
+
+                {filtered.length === 0 && (
+                  <div className="px-3 py-3 text-sm" style={{ color: COLORS.coolGreyMedium }}>
+                    {loadingList ? 'Loading…' : 'No cfr.propol users found.'}
+                  </div>
+                )}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
+  )
+}
+
+export default function DispolApprovalPickPropolPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <DispolApprovalPickPropolPageInner />
+    </Suspense>
   )
 }

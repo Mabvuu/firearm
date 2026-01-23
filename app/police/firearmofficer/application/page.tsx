@@ -50,17 +50,17 @@ type Gun = {
 const statusDot = (status: string) => {
   switch (status) {
     case 'unread':
-      return { bg: '#3E5C80', label: 'Unread' } // Lamar
+      return { bg: '#3E5C80', label: 'Unread' }
     case 'forwarded':
-      return { bg: '#212B37', label: 'Forwarded' } // Black Blue
+      return { bg: '#212B37', label: 'Forwarded' }
     case 'returned':
-      return { bg: '#ACACAC', label: 'Returned' } // Cool Grey
+      return { bg: '#ACACAC', label: 'Returned' }
     default:
-      return { bg: '#D9D8D6', label: status || 'Unknown' } // Natural Aluminum
+      return { bg: '#D9D8D6', label: status || 'Unknown' }
   }
 }
 
-// ✅ order: attachments -> competency -> oic
+// order: attachments -> competency -> oic
 const nextStep = (app: Application) => {
   const hasAttachments = (app.attachments?.length ?? 0) > 0
   const hasCompetency = !!app.competency_id
@@ -104,20 +104,28 @@ export default function FirearmOfficerApplicationsPage() {
     const loadApps = async () => {
       const {
         data: { user },
+        error: userErr,
       } = await supabase.auth.getUser()
 
-      if (!user?.email) {
+      if (userErr || !user?.email) {
         setLoading(false)
         return
       }
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('applications')
         .select('*')
         .eq('officer_email', user.email)
         .order('created_at', { ascending: false })
 
-      setApps((data as Application[]) || [])
+      if (error) {
+        // keep it simple like your other pages
+        alert(error.message)
+        setLoading(false)
+        return
+      }
+
+      setApps((data as Application[]) ?? [])
       setLoading(false)
     }
 
@@ -129,11 +137,13 @@ export default function FirearmOfficerApplicationsPage() {
       if (requestedGunIds.current.has(gunId)) return
       requestedGunIds.current.add(gunId)
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('inventory')
         .select('id, make, model, caliber, serial')
         .eq('id', gunId)
         .maybeSingle()
+
+      if (error) return
 
       setGuns(prev => ({
         ...prev,
@@ -155,17 +165,11 @@ export default function FirearmOfficerApplicationsPage() {
 
   return (
     <div className="flex min-h-screen" style={{ backgroundColor: COLORS.snowWhite }}>
-      {/* Left nav */}
-      <div
-        className="w-1/4 min-w-[260px] border-r"
-        style={{ borderColor: COLORS.naturalAluminum }}
-      >
+      <div className="w-1/4 min-w-[260px] border-r" style={{ borderColor: COLORS.naturalAluminum }}>
         <NavPage />
       </div>
 
-      {/* Right content */}
       <div className="w-3/4 p-8">
-        {/* Page header */}
         <div className="mb-4">
           <h1 className="text-3xl font-semibold" style={{ color: COLORS.blackBlue }}>
             Assigned Applications
@@ -204,11 +208,7 @@ export default function FirearmOfficerApplicationsPage() {
                       style={{ borderColor: COLORS.naturalAluminum, backgroundColor: '#fff' }}
                     >
                       <AccordionTrigger className="flex items-center gap-3 px-4 py-3 hover:no-underline">
-                        {/* status dot */}
-                        <div
-                          className="h-3 w-3 rounded-full"
-                          style={{ backgroundColor: dot.bg }}
-                        />
+                        <div className="h-3 w-3 rounded-full" style={{ backgroundColor: dot.bg }} />
 
                         <div className="flex-1 text-left">
                           <div className="flex items-center gap-2">
@@ -238,10 +238,12 @@ export default function FirearmOfficerApplicationsPage() {
                       </AccordionTrigger>
 
                       <AccordionContent className="px-4 pb-4">
-                        {/* Applicant Details */}
                         <div
                           className="rounded-md border p-4"
-                          style={{ borderColor: COLORS.naturalAluminum, backgroundColor: COLORS.snowWhite }}
+                          style={{
+                            borderColor: COLORS.naturalAluminum,
+                            backgroundColor: COLORS.snowWhite,
+                          }}
                         >
                           <div className="mb-2 text-sm font-semibold" style={{ color: COLORS.blackBlue }}>
                             Applicant Details
@@ -266,7 +268,6 @@ export default function FirearmOfficerApplicationsPage() {
                           </div>
                         </div>
 
-                        {/* Firearm Details */}
                         <div
                           className="mt-4 rounded-md border p-4"
                           style={{ borderColor: COLORS.naturalAluminum, backgroundColor: '#fff' }}
@@ -301,7 +302,6 @@ export default function FirearmOfficerApplicationsPage() {
                           )}
                         </div>
 
-                        {/* Progress */}
                         <div className="mt-4 flex flex-wrap gap-2 text-xs">
                           <Badge
                             variant="outline"
@@ -337,17 +337,13 @@ export default function FirearmOfficerApplicationsPage() {
                           </Badge>
                         </div>
 
-                        {/* Next button */}
                         <div className="mt-4 flex justify-end">
                           {step.done ? (
                             <Button
                               size="sm"
                               disabled
                               className="h-10 px-4"
-                              style={{
-                                backgroundColor: COLORS.naturalAluminum,
-                                color: COLORS.blackBlue,
-                              }}
+                              style={{ backgroundColor: COLORS.naturalAluminum, color: COLORS.blackBlue }}
                             >
                               {step.label}
                             </Button>
@@ -356,10 +352,7 @@ export default function FirearmOfficerApplicationsPage() {
                               asChild
                               size="sm"
                               className="h-10 px-4"
-                              style={{
-                                backgroundColor: COLORS.blackBlue,
-                                color: COLORS.snowWhite,
-                              }}
+                              style={{ backgroundColor: COLORS.blackBlue, color: COLORS.snowWhite }}
                             >
                               <Link href={step.href}>{step.label}</Link>
                             </Button>

@@ -1,7 +1,7 @@
 // app/cfr/dispol/application/add-attachment/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import NavPage from '../../nav/page'
 import { supabase } from '@/lib/supabase/client'
@@ -25,16 +25,7 @@ type Application = {
   status: string
 }
 
-const allowedExt = new Set([
-  'pdf',
-  'doc',
-  'docx',
-  'xls',
-  'xlsx',
-  'jpg',
-  'jpeg',
-  'png',
-])
+const allowedExt = new Set(['pdf', 'doc', 'docx', 'xls', 'xlsx', 'jpg', 'jpeg', 'png'])
 
 const getExt = (name: string) => {
   const p = name.split('.')
@@ -42,7 +33,7 @@ const getExt = (name: string) => {
   return p[p.length - 1]!.toLowerCase()
 }
 
-export default function DispolAddAttachmentPage() {
+function DispolAddAttachmentPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const appId = Number(searchParams.get('appId'))
@@ -95,7 +86,6 @@ export default function DispolAddAttachmentPage() {
     const list = Array.from(files)
     if (!list.length) return
 
-    // validate types (word/excel/images/pdf)
     for (const f of list) {
       const ext = getExt(f.name)
       if (!allowedExt.has(ext)) {
@@ -113,9 +103,9 @@ export default function DispolAddAttachmentPage() {
       const safeName = file.name.replace(/[^\w.\-() ]+/g, '_')
       const path = `${app.id}/dispol/${crypto.randomUUID()}-${safeName}`
 
-      const { error: upErr } = await supabase.storage
-        .from('applications')
-        .upload(path, file, { upsert: false })
+      const { error: upErr } = await supabase.storage.from('applications').upload(path, file, {
+        upsert: false,
+      })
 
       if (upErr) {
         setUploading(false)
@@ -128,10 +118,7 @@ export default function DispolAddAttachmentPage() {
 
     const updated = [...(app.attachments ?? []), ...uploaded]
 
-    const { error: dbErr } = await supabase
-      .from('applications')
-      .update({ attachments: updated })
-      .eq('id', app.id)
+    const { error: dbErr } = await supabase.from('applications').update({ attachments: updated }).eq('id', app.id)
 
     setUploading(false)
 
@@ -148,10 +135,7 @@ export default function DispolAddAttachmentPage() {
     setSaving(true)
     setErrorMsg(null)
 
-    const { error } = await supabase
-      .from('applications')
-      .update({ dispol_notes: notes })
-      .eq('id', app.id)
+    const { error } = await supabase.from('applications').update({ dispol_notes: notes }).eq('id', app.id)
 
     setSaving(false)
 
@@ -168,10 +152,7 @@ export default function DispolAddAttachmentPage() {
     setActing(true)
     setErrorMsg(null)
 
-    const { error } = await supabase
-      .from('applications')
-      .update({ status: 'dispol_declined' })
-      .eq('id', app.id)
+    const { error } = await supabase.from('applications').update({ status: 'dispol_declined' }).eq('id', app.id)
 
     setActing(false)
 
@@ -188,10 +169,7 @@ export default function DispolAddAttachmentPage() {
     setActing(true)
     setErrorMsg(null)
 
-    const { error } = await supabase
-      .from('applications')
-      .update({ status: 'approved_by_dispol' })
-      .eq('id', app.id)
+    const { error } = await supabase.from('applications').update({ status: 'approved_by_dispol' }).eq('id', app.id)
 
     setActing(false)
 
@@ -201,6 +179,14 @@ export default function DispolAddAttachmentPage() {
     }
 
     router.push(`/cfr/dispol/application/approval?appId=${app.id}`)
+  }
+
+  if (!appId) {
+    return (
+      <div className="p-8" style={{ backgroundColor: COLORS.snowWhite, color: COLORS.blackBlue }}>
+        Missing appId in URL.
+      </div>
+    )
   }
 
   if (!app && !errorMsg) {
@@ -252,13 +238,16 @@ export default function DispolAddAttachmentPage() {
             {errorMsg && (
               <div
                 className="rounded-md border p-3 text-sm"
-                style={{ borderColor: 'rgba(239,68,68,0.4)', backgroundColor: 'rgba(239,68,68,0.08)', color: '#991b1b' }}
+                style={{
+                  borderColor: 'rgba(239,68,68,0.4)',
+                  backgroundColor: 'rgba(239,68,68,0.08)',
+                  color: '#991b1b',
+                }}
               >
                 {errorMsg}
               </div>
             )}
 
-            {/* UPLOAD (compact) */}
             <div className="rounded-md border bg-white" style={{ borderColor: COLORS.naturalAluminum }}>
               <div className="px-3 py-2 border-b" style={{ borderColor: COLORS.naturalAluminum }}>
                 <div className="text-sm font-semibold" style={{ color: COLORS.blackBlue }}>
@@ -286,7 +275,6 @@ export default function DispolAddAttachmentPage() {
               </div>
             </div>
 
-            {/* FILE LIST (plain lines, like “file system”) */}
             <div className="rounded-md border bg-white" style={{ borderColor: COLORS.naturalAluminum }}>
               <div className="px-3 py-2 border-b" style={{ borderColor: COLORS.naturalAluminum }}>
                 <div className="text-sm font-semibold" style={{ color: COLORS.blackBlue }}>
@@ -320,7 +308,6 @@ export default function DispolAddAttachmentPage() {
               )}
             </div>
 
-            {/* NOTES */}
             <div className="rounded-md border bg-white" style={{ borderColor: COLORS.naturalAluminum }}>
               <div className="px-3 py-2 border-b" style={{ borderColor: COLORS.naturalAluminum }}>
                 <div className="text-sm font-semibold" style={{ color: COLORS.blackBlue }}>
@@ -351,7 +338,6 @@ export default function DispolAddAttachmentPage() {
               </div>
             </div>
 
-            {/* ACTIONS */}
             <div className="flex justify-end gap-2 pt-1">
               <Button variant="destructive" onClick={decline} disabled={acting}>
                 {acting ? 'Working…' : 'Decline'}
@@ -369,5 +355,13 @@ export default function DispolAddAttachmentPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function DispolAddAttachmentPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <DispolAddAttachmentPageInner />
+    </Suspense>
   )
 }

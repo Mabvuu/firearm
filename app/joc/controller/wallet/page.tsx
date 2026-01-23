@@ -1,7 +1,7 @@
 // app/joc/controller/wallet/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import NavPage from '../nav/page'
 import { supabase } from '@/lib/supabase/client'
@@ -32,7 +32,7 @@ type WalletGunRow = {
   inventory: Inventory | null
 }
 
-export default function WalletPage() {
+function WalletPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -66,7 +66,6 @@ export default function WalletPage() {
       setWallet(null)
       setWalletGuns([])
 
-      // must have either walletId or appId
       if (!walletId && !appId) {
         setErrorMsg('Missing walletId or appId')
         setLoading(false)
@@ -214,18 +213,14 @@ export default function WalletPage() {
           </Button>
         </div>
 
-        {errorMsg && (
-          <div className="border rounded p-3 text-sm text-red-600">{errorMsg}</div>
-        )}
+        {errorMsg && <div className="border rounded p-3 text-sm text-red-600">{errorMsg}</div>}
 
         {!wallet ? (
           <Card>
             <CardHeader>
               <CardTitle>Wallet</CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              No wallet loaded.
-            </CardContent>
+            <CardContent className="text-sm text-muted-foreground">No wallet loaded.</CardContent>
           </Card>
         ) : (
           <>
@@ -261,10 +256,18 @@ export default function WalletPage() {
                           <div className="text-sm text-muted-foreground">Gun not found.</div>
                         ) : (
                           <div className="text-sm space-y-1">
-                            <div><b>Make:</b> {row.inventory.make}</div>
-                            <div><b>Model:</b> {row.inventory.model}</div>
-                            <div><b>Caliber:</b> {row.inventory.caliber}</div>
-                            <div><b>Serial:</b> {row.inventory.serial}</div>
+                            <div>
+                              <b>Make:</b> {row.inventory.make}
+                            </div>
+                            <div>
+                              <b>Model:</b> {row.inventory.model}
+                            </div>
+                            <div>
+                              <b>Caliber:</b> {row.inventory.caliber}
+                            </div>
+                            <div>
+                              <b>Serial:</b> {row.inventory.serial}
+                            </div>
                             <div className="text-xs text-muted-foreground pt-1">
                               Linked from application #{row.application_id} •{' '}
                               {new Date(row.created_at).toLocaleString()}
@@ -281,5 +284,13 @@ export default function WalletPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function WalletPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <WalletPageInner />
+    </Suspense>
   )
 }

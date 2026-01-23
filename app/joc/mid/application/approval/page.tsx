@@ -1,7 +1,7 @@
 // app/joc/mid/application/approval/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import NavPage from '../../nav/page'
 import { supabase } from '@/lib/supabase/client'
@@ -22,7 +22,7 @@ type Pick = {
   auth_uid: string
 }
 
-export default function JOCMIDPickControllerPage() {
+function JOCMIDPickControllerPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const appId = Number(searchParams.get('appId'))
@@ -124,6 +124,7 @@ export default function JOCMIDPickControllerPage() {
     router.push('/joc/mid/application')
   }
 
+  if (!appId) return <div className="p-8">Missing appId in URL.</div>
   if (!app && !errorMsg) return <div className="p-8">Loading…</div>
 
   return (
@@ -142,9 +143,7 @@ export default function JOCMIDPickControllerPage() {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            {errorMsg && (
-              <div className="border rounded p-3 text-sm text-red-600">{errorMsg}</div>
-            )}
+            {errorMsg && <div className="border rounded p-3 text-sm text-red-600">{errorMsg}</div>}
 
             <Input
               placeholder="Search (email / national id / uid)"
@@ -194,5 +193,13 @@ export default function JOCMIDPickControllerPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function JOCMIDPickControllerPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <JOCMIDPickControllerPageInner />
+    </Suspense>
   )
 }

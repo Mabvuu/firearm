@@ -1,7 +1,7 @@
 // app/police/firearmofficer/application/attachments/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -25,17 +25,11 @@ type Application = {
 
 const BUCKET = 'applications'
 
-// ✅ allow: Word, "pictured word" (images), Excel
 const ACCEPTED_MIME = new Set<string>([
-  // Word
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-
-  // Excel
   'application/vnd.ms-excel',
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-
-  // Images ("pictured word")
   'image/jpeg',
   'image/png',
   'image/webp',
@@ -43,10 +37,9 @@ const ACCEPTED_MIME = new Set<string>([
   'image/heif',
 ])
 
-const ACCEPT_ATTR =
-  '.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.heic,.heif'
+const ACCEPT_ATTR = '.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.webp,.heic,.heif'
 
-export default function ApplicationAttachmentsPage() {
+function ApplicationAttachmentsPageInner() {
   const searchParams = useSearchParams()
   const appId = Number(searchParams.get('appId'))
 
@@ -75,7 +68,6 @@ export default function ApplicationAttachmentsPage() {
   }, [appId])
 
   const validateFile = (file: File) => {
-    // Some browsers give empty type; fallback to extension check
     const name = file.name.toLowerCase()
     const extOk =
       name.endsWith('.doc') ||
@@ -108,12 +100,10 @@ export default function ApplicationAttachmentsPage() {
     const safeName = file.name.replace(/[^\w.\-() ]+/g, '_')
     const path = `${app.id}/${crypto.randomUUID()}-${safeName}`
 
-    const { error: uploadErr } = await supabase.storage
-      .from(BUCKET) // ✅ bucket name: applications
-      .upload(path, file, {
-        contentType: file.type || undefined,
-        upsert: false,
-      })
+    const { error: uploadErr } = await supabase.storage.from(BUCKET).upload(path, file, {
+      contentType: file.type || undefined,
+      upsert: false,
+    })
 
     if (uploadErr) {
       alert(uploadErr.message)
@@ -193,7 +183,7 @@ export default function ApplicationAttachmentsPage() {
 
               <input
                 type="file"
-                accept={ACCEPT_ATTR} // ✅ UI restrict
+                accept={ACCEPT_ATTR}
                 disabled={uploading}
                 onChange={e => {
                   const file = e.target.files?.[0]
@@ -258,5 +248,13 @@ export default function ApplicationAttachmentsPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function ApplicationAttachmentsPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <ApplicationAttachmentsPageInner />
+    </Suspense>
   )
 }

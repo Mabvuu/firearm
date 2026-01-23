@@ -1,6 +1,7 @@
+// app/police/firearmofficer/application/oic/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import NavPage from '../../nav/page'
 import { supabase } from '@/lib/supabase/client'
@@ -23,7 +24,7 @@ type OICPick = {
   auth_uid: string
 }
 
-export default function ApplicationOICPage() {
+function ApplicationOICPageInner() {
   const searchParams = useSearchParams()
   const appId = Number(searchParams.get('appId'))
 
@@ -39,22 +40,36 @@ export default function ApplicationOICPage() {
   useEffect(() => {
     if (!appId) return
 
-    supabase
-      .from('applications')
-      .select('id, applicant_name, oic_email, forwarded_by_email, forwarded_by_uid, status')
-      .eq('id', appId)
-      .single()
-      .then(({ data }) => setApp((data as Application) ?? null))
+    const load = async () => {
+      const {
+        data,
+        error,
+      }: { data: Application | null; error: { message: string } | null } = await supabase
+        .from('applications')
+        .select('id, applicant_name, oic_email, forwarded_by_email, forwarded_by_uid, status')
+        .eq('id', appId)
+        .maybeSingle()
+
+      if (error) {
+        alert(error.message)
+        return
+      }
+
+      setApp(data ?? null)
+    }
+
+    load()
   }, [appId])
 
   const loadOICs = async () => {
     setLoadingOic(true)
 
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('email, national_id, auth_uid')
-      .eq('role', 'police.oic')
-      .order('created_at', { ascending: false })
+    const { data, error }: { data: OICPick[] | null; error: { message: string } | null } =
+      await supabase
+        .from('profiles')
+        .select('email, national_id, auth_uid')
+        .eq('role', 'police.oic')
+        .order('created_at', { ascending: false })
 
     setLoadingOic(false)
 
@@ -63,7 +78,7 @@ export default function ApplicationOICPage() {
       return
     }
 
-    setOics((data as OICPick[]) ?? [])
+    setOics(data ?? [])
   }
 
   const filteredOICs = useMemo(() => {
@@ -80,15 +95,16 @@ export default function ApplicationOICPage() {
 
     const {
       data: { user },
+      error: userErr,
     } = await supabase.auth.getUser()
 
-    if (!user?.email || !user.id) {
+    if (userErr || !user?.email || !user.id) {
       setSending(false)
       alert('Not logged in')
       return
     }
 
-    const { error } = await supabase
+    const { error }: { error: { message: string } | null } = await supabase
       .from('applications')
       .update({
         status: 'forwarded',
@@ -191,10 +207,9 @@ export default function ApplicationOICPage() {
                           </Button>
                         </div>
                       ))}
+
                       {!filteredOICs.length && (
-                        <div className="text-sm text-muted-foreground p-2">
-                          No OIC found.
-                        </div>
+                        <div className="text-sm text-muted-foreground p-2">No OIC found.</div>
                       )}
                     </div>
 
@@ -210,8 +225,7 @@ export default function ApplicationOICPage() {
                   <Button
                     variant="outline"
                     onClick={() =>
-                      (window.location.href =
-                        `/police/firearmofficer/application/competency?appId=${app.id}`)
+                      (window.location.href = `/police/firearmofficer/application/competency?appId=${app.id}`)
                     }
                   >
                     Back
@@ -219,10 +233,7 @@ export default function ApplicationOICPage() {
 
                   <Button
                     variant="outline"
-                    onClick={() =>
-                      (window.location.href =
-                        `/police/firearmofficer/application?appId=${app.id}`)
-                    }
+                    onClick={() => (window.location.href = `/police/firearmofficer/application?appId=${app.id}`)}
                   >
                     Cancel
                   </Button>
@@ -233,5 +244,13 @@ export default function ApplicationOICPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function ApplicationOICPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <ApplicationOICPageInner />
+    </Suspense>
   )
 }
