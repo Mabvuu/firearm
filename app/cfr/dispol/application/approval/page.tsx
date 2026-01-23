@@ -1,7 +1,7 @@
 // app/cfr/dispol/application/approval/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import NavPage from '../../nav/page'
 import { supabase } from '@/lib/supabase/client'
@@ -30,10 +30,13 @@ type Pick = {
   auth_uid: string
 }
 
-export default function DispolApprovalPickPropolPage() {
+function DispolApprovalPickPropolInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const appId = Number(searchParams.get('appId'))
+
+  const appIdRaw = searchParams.get('appId')
+  const appId = Number(appIdRaw)
+  const missingAppId = !appIdRaw || Number.isNaN(appId) || appId <= 0
 
   const [app, setApp] = useState<Application | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
@@ -44,7 +47,7 @@ export default function DispolApprovalPickPropolPage() {
   const [sendingEmail, setSendingEmail] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!appId) return
+    if (missingAppId) return
 
     const load = async () => {
       const { data, error } = await supabase
@@ -62,7 +65,7 @@ export default function DispolApprovalPickPropolPage() {
     }
 
     load()
-  }, [appId])
+  }, [appId, missingAppId])
 
   useEffect(() => {
     const loadPeople = async () => {
@@ -130,6 +133,14 @@ export default function DispolApprovalPickPropolPage() {
     }
 
     router.push('/cfr/dispol/application')
+  }
+
+  if (missingAppId) {
+    return (
+      <div className="p-8" style={{ backgroundColor: COLORS.snowWhite, color: COLORS.blackBlue }}>
+        Missing appId
+      </div>
+    )
   }
 
   if (!app && !errorMsg) {
@@ -218,12 +229,12 @@ export default function DispolApprovalPickPropolPage() {
                 </div>
               </div>
 
-              <div className="max-h-80 overflow-y-auto divide-y" style={{ borderColor: COLORS.naturalAluminum }}>
+              <div
+                className="max-h-80 overflow-y-auto divide-y"
+                style={{ borderColor: COLORS.naturalAluminum }}
+              >
                 {filtered.map(p => (
-                  <div
-                    key={p.email}
-                    className="px-3 py-2 flex items-center justify-between gap-3"
-                  >
+                  <div key={p.email} className="px-3 py-2 flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="text-sm font-medium truncate" style={{ color: COLORS.blackBlue }}>
                         {p.email}
@@ -255,5 +266,13 @@ export default function DispolApprovalPickPropolPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function DispolApprovalPickPropolPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <DispolApprovalPickPropolInner />
+    </Suspense>
   )
 }

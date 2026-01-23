@@ -1,7 +1,7 @@
 // app/joc/mid/application/add-notes/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import NavPage from '../../nav/page'
 import { supabase } from '@/lib/supabase/client'
@@ -14,17 +14,19 @@ type Application = {
   joc_mid_notes: string | null
 }
 
-export default function JOCMIDAddNotesPage() {
+function JOCMIDAddNotesInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const appId = Number(searchParams.get('appId'))
+  const appIdRaw = searchParams.get('appId')
+  const appId = Number(appIdRaw)
+  const missingAppId = !appIdRaw || Number.isNaN(appId) || appId <= 0
 
   const [app, setApp] = useState<Application | null>(null)
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    if (!appId) return
+    if (missingAppId) return
 
     const load = async () => {
       const { data, error } = await supabase
@@ -38,12 +40,13 @@ export default function JOCMIDAddNotesPage() {
         return
       }
 
-      setApp(data as Application)
-      setNotes(data?.joc_mid_notes ?? '')
+      const a = data as Application
+      setApp(a)
+      setNotes(a?.joc_mid_notes ?? '')
     }
 
     load()
-  }, [appId])
+  }, [appId, missingAppId])
 
   const saveAndNext = async () => {
     if (!app) return
@@ -64,6 +67,7 @@ export default function JOCMIDAddNotesPage() {
     router.push(`/joc/mid/application/approval?appId=${app.id}`)
   }
 
+  if (missingAppId) return <div className="p-8">Missing appId</div>
   if (!app) return <div className="p-8">Loading…</div>
 
   return (
@@ -101,5 +105,13 @@ export default function JOCMIDAddNotesPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function JOCMIDAddNotesPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <JOCMIDAddNotesInner />
+    </Suspense>
   )
 }

@@ -1,7 +1,7 @@
 // app/joc/oic/application/approval/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import NavPage from '../../nav/page'
 import { supabase } from '@/lib/supabase/client'
@@ -25,7 +25,7 @@ type Pick = {
   auth_uid: string
 }
 
-export default function PickJocMidPage() {
+function PickJocMidPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -43,7 +43,6 @@ export default function PickJocMidPage() {
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // load application
   useEffect(() => {
     if (missingAppId) return
 
@@ -70,7 +69,6 @@ export default function PickJocMidPage() {
     load()
   }, [appId, missingAppId])
 
-  // load JOC MID users
   useEffect(() => {
     const loadPeople = async () => {
       setLoadingList(true)
@@ -152,13 +150,10 @@ export default function PickJocMidPage() {
 
       <main className="flex-1">
         <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8 space-y-6">
-          {/* Header */}
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div className="space-y-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-3xl font-semibold tracking-tight">
-                  Assign JOC MID
-                </h1>
+                <h1 className="text-3xl font-semibold tracking-tight">Assign JOC MID</h1>
                 <Badge variant="outline">JOC Officer In Charge</Badge>
               </div>
               <p className="text-sm text-muted-foreground">
@@ -193,7 +188,6 @@ export default function PickJocMidPage() {
             </Alert>
           )}
 
-          {/* Content */}
           <Card className="shadow-sm">
             <CardHeader className="space-y-2">
               <div className="flex items-center justify-between gap-3">
@@ -250,9 +244,7 @@ export default function PickJocMidPage() {
                       })}
                     </div>
                   ) : (
-                    <div className="p-4 text-sm text-muted-foreground">
-                      No joc.mid users found.
-                    </div>
+                    <div className="p-4 text-sm text-muted-foreground">No joc.mid users found.</div>
                   )}
                 </div>
               </div>
@@ -269,5 +261,13 @@ export default function PickJocMidPage() {
         </div>
       </main>
     </div>
+  )
+}
+
+export default function PickJocMidPage() {
+  return (
+    <Suspense fallback={<div className="p-8">Loading…</div>}>
+      <PickJocMidPageInner />
+    </Suspense>
   )
 }
