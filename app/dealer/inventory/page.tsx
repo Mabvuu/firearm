@@ -31,8 +31,6 @@ type Gun = {
   date_of_import: string | null
   minted: boolean
   minted_at: string | null
-
-  // optional UI fields if you have them
   ownership_state?: string | null
 }
 
@@ -51,39 +49,43 @@ export default function InventoryListPage() {
   const [query, setQuery] = useState('')
   const [mintFilter, setMintFilter] = useState<MintFilter>('ALL')
 
-  useEffect(() => {
-    const fetchInventoryAsync = async () => {
-      setLoading(true)
+  const fetchInventoryAsync = async () => {
+    setLoading(true)
 
-      const {
-        data: { user },
-        error: userErr,
-      } = await supabase.auth.getUser()
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabase.auth.getUser()
 
-      if (userErr || !user?.id) {
-        setInventory([])
-        setLoading(false)
-        return
-      }
-
-      // ✅ ONLY guns still owned by this dealer
-      const { data, error } = await supabase
-        .from('inventory')
-        .select('id, make, model, caliber, serial, date_of_import, minted, minted_at, ownership_state')
-        .eq('owner_id', user.id)
-        .order('id', { ascending: true })
-
-      if (error) {
-        console.error(error)
-        setInventory([])
-      } else {
-        setInventory((data as Gun[]) || [])
-      }
-
+    if (userErr || !user?.id) {
+      setInventory([])
       setLoading(false)
+      return
     }
 
-    void fetchInventoryAsync()
+    // ✅ ONLY guns still owned by this dealer (in possession / under review)
+    const { data, error } = await supabase
+      .from('inventory')
+      .select('id, make, model, caliber, serial, date_of_import, minted, minted_at, ownership_state')
+      .eq('owner_id', user.id)
+      .neq('ownership_state', 'CIVILIAN') // ✅ transferred guns moved out
+      .order('id', { ascending: true })
+
+    if (error) {
+      console.error(error)
+      setInventory([])
+    } else {
+      setInventory((data as Gun[]) || [])
+    }
+
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    const t0 = setTimeout(() => {
+      void fetchInventoryAsync()
+    }, 0)
+    return () => clearTimeout(t0)
   }, [])
 
   const filtered = useMemo(() => {
@@ -119,8 +121,16 @@ export default function InventoryListPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="border-black/15 text-[#1F2A35]"
+                    onClick={() => void fetchInventoryAsync()}
+                  >
+                    Refresh
+                  </Button>
+
                   <Button asChild variant="outline" className="border-black/15 text-[#1F2A35]">
-                    <Link href="/dealer/mint">Mint</Link>
+                    <Link href="/dealer/firearm">Transferred</Link>
                   </Button>
 
                   <Button asChild className="text-white" style={{ backgroundColor: '#2F4F6F' }}>

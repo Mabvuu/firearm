@@ -1,11 +1,10 @@
-// app/dealer/mint/page.tsx
+// firearm-system/app/dealer/mint/page.tsx
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import NavPage from '../nav/page'
 import { supabase } from '@/lib/supabase/client'
-import { mintFirearm, initializeProgram } from '@/lib/solana/client'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,24 +21,13 @@ type InventoryGun = {
   minted: boolean
 }
 
-type PublicKeyLike = { toString: () => string }
-
-type SolanaProvider = {
-  connect: (opts?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: PublicKeyLike }>
-  publicKey?: PublicKeyLike | null
+type DealerCreditsRow = {
+  balance: number
 }
 
-type WindowWithSolana = Window & {
-  solana?: SolanaProvider
-  phantom?: { solana?: SolanaProvider }
-  solflare?: SolanaProvider
-  backpack?: SolanaProvider
-}
-
-function getProvider(): SolanaProvider | null {
-  const w = window as unknown as WindowWithSolana
-  return w.phantom?.solana ?? w.solflare ?? w.backpack ?? w.solana ?? null
-}
+type MintOk = { ok: true; txSig?: string; firearmPda?: string }
+type MintFail = { ok: false; error: string }
+type MintResponse = MintOk | MintFail
 
 function formatDate(d: string) {
   try {
@@ -59,42 +47,26 @@ function toErrMessage(err: unknown) {
   }
 }
 
+async function safeReadJson(res: Response): Promise<MintResponse> {
+  const txt = await res.text()
+  if (!txt) return { ok: false, error: `Empty response (HTTP ${res.status})` }
+  try {
+    return JSON.parse(txt) as MintResponse
+  } catch {
+    return { ok: false, error: `Non-JSON response (HTTP ${res.status}): ${txt.slice(0, 200)}` }
+  }
+}
+
 export default function MintPage() {
   const [inventory, setInventory] = useState<InventoryGun[]>([])
   const [query, setQuery] = useState('')
   const [selectedGun, setSelectedGun] = useState<InventoryGun | null>(null)
   const [loading, setLoading] = useState(false)
 
-  const [walletAddr, setWalletAddr] = useState<string>('')
-  const [walletStatus, setWalletStatus] = useState<'DISCONNECTED' | 'SAVED' | 'CONNECTED'>('DISCONNECTED')
+  const [credits, setCredits] = useState<number | null>(null)
 
   useEffect(() => {
-    const initWallet = async () => {
-      const stored = localStorage.getItem('registeredSolWallet')
-      if (stored) {
-        setWalletAddr(stored)
-        setWalletStatus('SAVED')
-      }
-
-      const provider = getProvider()
-      if (!provider) return
-
-      try {
-        const res = await provider.connect({ onlyIfTrusted: true })
-        const addr = res.publicKey.toString()
-        setWalletAddr(addr)
-        setWalletStatus('CONNECTED')
-        localStorage.setItem('registeredSolWallet', addr)
-      } catch {
-        // ignore
-      }
-    }
-
-    setTimeout(() => void initWallet(), 0)
-  }, [])
-
-  useEffect(() => {
-    const fetchInventory = async () => {
+    const init = async () => {
       const { data } = await supabase.auth.getUser()
       const user = data.user
       if (!user) return
@@ -108,88 +80,64 @@ export default function MintPage() {
       if (error) {
         console.error(error)
         setInventory([])
-        return
+      } else {
+        setInventory((inv as InventoryGun[]) || [])
       }
 
-      setInventory((inv as InventoryGun[]) || [])
+      // credits now come from dealer_credits.balance (not dealer_wallets)
+      const { data: c, error: cErr } = await supabase
+        .from('dealer_credits')
+        .select('balance')
+        .eq('dealer_id', user.id)
+        .maybeSingle<DealerCreditsRow>()
+
+      if (!cErr && c) setCredits(typeof c.balance === 'number' ? c.balance : 0)
+      else setCredits(0)
     }
 
-    void fetchInventory()
+    setTimeout(() => void init(), 0)
   }, [])
 
   const filteredInventory = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return inventory
-    return inventory.filter(g => `${g.serial} ${g.make} ${g.model} ${g.caliber}`.toLowerCase().includes(q))
+    return inventory.filter((g) =>
+      `${g.serial} ${g.make} ${g.model} ${g.caliber}`.toLowerCase().includes(q)
+    )
   }, [inventory, query])
 
-  async function connectWallet() {
-    const provider = getProvider()
-    if (!provider) {
-      alert('Install a Solana wallet (Phantom / Solflare / Backpack)')
-      return
-    }
-
-    try {
-      const res = await provider.connect()
-      const addr = res.publicKey.toString()
-      setWalletAddr(addr)
-      setWalletStatus('CONNECTED')
-      localStorage.setItem('registeredSolWallet', addr)
-    } catch (e) {
-      console.error(e)
-      alert('Wallet connection failed')
-    }
-  }
-
   async function mintGun() {
-    if (!selectedGun) {
-      alert('Select a firearm first')
-      return
-    }
-
-    const provider = getProvider()
-    if (!provider) {
-      alert('Install a Solana wallet (Phantom / Solflare / Backpack)')
-      return
-    }
+    if (!selectedGun) return alert('Select a firearm first')
+    if ((credits ?? 0) <= 0) return alert('No credits. Please renew / buy credits.')
 
     setLoading(true)
     try {
-      // init if needed; ignore if already initialized
-      try {
-        await initializeProgram()
-      } catch (e) {
-        console.warn('initializeProgram skipped:', e)
-      }
+      const { data } = await supabase.auth.getUser()
+      const user = data.user
+      if (!user) return alert('Not logged in')
 
-      const dateBroughtIn = Math.floor(new Date(selectedGun.date_of_import).getTime() / 1000)
-
-      const sig = await mintFirearm({
-        serial: selectedGun.serial,
-        make: selectedGun.make,
-        model: selectedGun.model,
-        caliber: selectedGun.caliber,
-        dateBroughtIn,
-        ownerId: 'OWNER-ID-123',
+      // NEW payload keys must match backend route.ts
+      const res = await fetch('/api/dealer/mint', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dealer_id: user.id, inventory_id: selectedGun.id }),
       })
 
-      const { error: upErr } = await supabase
-        .from('inventory')
-        .update({ minted: true })
-        .eq('id', selectedGun.id)
+      const json = await safeReadJson(res)
 
-      if (upErr) {
-        console.error(upErr)
-        alert('Minted on-chain but failed to update Supabase inventory.minted')
+      if (!res.ok || !json.ok) {
+        alert(json.ok ? 'Mint failed' : json.error || 'Mint failed')
         return
       }
 
-      setInventory(prev => prev.filter(g => g.id !== selectedGun.id))
+      setInventory((prev) => prev.filter((g) => g.id !== selectedGun.id))
       setSelectedGun(null)
       setQuery('')
 
-      alert(`Minted.\nTx: ${sig}`)
+      // our backend consumes 1 credit, so reflect it locally
+      setCredits((c) => (typeof c === 'number' ? Math.max(0, c - 1) : c))
+
+      alert(`Minted.\nTx: ${json.txSig ?? 'submitted'}`)
     } catch (err: unknown) {
       console.error(err)
       alert(`Mint failed: ${toErrMessage(err)}`)
@@ -214,23 +162,21 @@ export default function MintPage() {
           <div className="flex items-center gap-2">
             <Badge
               className="border"
-              style={{
-                backgroundColor: '#E6E5E2',
-                borderColor: '#B5B5B366',
-                color: '#1F2A35',
-              }}
+              style={{ backgroundColor: '#E6E5E2', borderColor: '#B5B5B366', color: '#1F2A35' }}
             >
-              {walletStatus === 'CONNECTED'
-                ? 'Wallet connected'
-                : walletStatus === 'SAVED'
-                ? 'Wallet saved'
-                : 'Wallet not connected'}
+              Wallet: Managed
             </Badge>
-
-            <Button onClick={connectWallet} variant="outline" className="border-black/20 text-[#1F2A35]">
-              {walletAddr ? `${walletAddr.slice(0, 4)}...${walletAddr.slice(-4)}` : 'Connect Wallet'}
-            </Button>
+            <Badge
+              className="border"
+              style={{ backgroundColor: '#E6E5E2', borderColor: '#B5B5B366', color: '#1F2A35' }}
+            >
+              Credits: {credits === null ? '—' : credits}
+            </Badge>
           </div>
+        </div>
+
+        <div className="mt-2 text-[11px] text-[#1F2A35]/60">
+          Wallet is handled by the platform (no Phantom needed).
         </div>
 
         <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
@@ -243,7 +189,7 @@ export default function MintPage() {
               <Input
                 placeholder="Search serial, make, model, caliber"
                 value={query}
-                onChange={e => setQuery(e.target.value)}
+                onChange={(e) => setQuery(e.target.value)}
               />
 
               <div className="rounded-md border border-black/10 bg-white">
@@ -262,7 +208,7 @@ export default function MintPage() {
                       </div>
                     </div>
                   ) : (
-                    filteredInventory.map(g => {
+                    filteredInventory.map((g) => {
                       const active = selectedGun?.id === g.id
                       return (
                         <button
@@ -299,22 +245,36 @@ export default function MintPage() {
                 </div>
               ) : (
                 <div className="rounded-md border border-black/10 bg-white p-4 space-y-2">
-                  <div className="text-sm"><b>Serial:</b> {selectedGun.serial}</div>
-                  <div className="text-sm"><b>Make:</b> {selectedGun.make}</div>
-                  <div className="text-sm"><b>Model:</b> {selectedGun.model}</div>
-                  <div className="text-sm"><b>Caliber:</b> {selectedGun.caliber}</div>
-                  <div className="text-sm"><b>Date:</b> {formatDate(selectedGun.date_of_import)}</div>
+                  <div className="text-sm">
+                    <b>Serial:</b> {selectedGun.serial}
+                  </div>
+                  <div className="text-sm">
+                    <b>Make:</b> {selectedGun.make}
+                  </div>
+                  <div className="text-sm">
+                    <b>Model:</b> {selectedGun.model}
+                  </div>
+                  <div className="text-sm">
+                    <b>Caliber:</b> {selectedGun.caliber}
+                  </div>
+                  <div className="text-sm">
+                    <b>Date:</b> {formatDate(selectedGun.date_of_import)}
+                  </div>
                 </div>
               )}
 
               <Button
                 onClick={mintGun}
-                disabled={loading || !selectedGun}
+                disabled={loading || !selectedGun || (credits ?? 0) <= 0}
                 className="w-full text-white"
                 style={{ backgroundColor: '#2F4F6F' }}
               >
-                {loading ? 'Minting…' : 'Mint Firearm'}
+                {loading ? 'Minting…' : (credits ?? 0) <= 0 ? 'No Credits' : 'Mint Firearm'}
               </Button>
+
+              {(credits ?? 0) <= 0 ? (
+                <div className="text-xs text-[#B65A4A]">You have no credits. Please renew / buy credits.</div>
+              ) : null}
             </CardContent>
           </Card>
         </div>
