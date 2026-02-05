@@ -20,6 +20,7 @@ type Gun = {
   model: string
   caliber: string | null
   serial: string | null
+  minted: boolean
 }
 
 type Step = 1 | 2 | 3 | 4
@@ -125,7 +126,7 @@ export default function DealerApplicationPage() {
   const loadMintedGuns = async () => {
     const { data, error } = await supabase
       .from('inventory')
-      .select('id, make, model, caliber, serial')
+      .select('id, make, model, caliber, serial, minted')
       .eq('minted', true)
 
     if (error) {
@@ -134,7 +135,7 @@ export default function DealerApplicationPage() {
       return
     }
 
-    setGuns(data || [])
+    setGuns((data || []) as Gun[])
   }
 
   const loadOfficers = async () => {
@@ -167,6 +168,18 @@ export default function DealerApplicationPage() {
   const next = () => setStep(s => (s < 4 ? ((s + 1) as Step) : s))
   const back = () => setStep(s => (s > 1 ? ((s - 1) as Step) : s))
 
+  // ✅ HARD CHECK: only minted guns can be submitted (even if someone bypasses the picker)
+  const ensureSelectedGunIsMinted = async (gunId: number) => {
+    const { data, error } = await supabase
+      .from('inventory')
+      .select('id, minted')
+      .eq('id', gunId)
+      .maybeSingle()
+
+    if (error) throw error
+    return !!data?.minted
+  }
+
   const submitApplication = async () => {
     try {
       setSubmitting(true)
@@ -193,6 +206,15 @@ export default function DealerApplicationPage() {
 
       if (!form.gun_uid) {
         alert('Select a firearm')
+        setSubmitting(false)
+        return
+      }
+
+      // ✅ enforce minted only
+      const okMinted = await ensureSelectedGunIsMinted(form.gun_uid)
+      if (!okMinted) {
+        alert('This firearm is NOT minted yet. Mint it first.')
+        setForm(f => ({ ...f, gun_uid: null }))
         setSubmitting(false)
         return
       }
@@ -258,6 +280,7 @@ export default function DealerApplicationPage() {
   }
 
   const districtsForProvince = form.province ? DISTRICTS[form.province] : []
+  const selectedGun = form.gun_uid ? guns.find(g => g.id === form.gun_uid) : null
 
   return (
     <div className="flex min-h-screen bg-[#F7F6F2]">
@@ -438,7 +461,10 @@ export default function DealerApplicationPage() {
 
                     {form.gun_uid && (
                       <div className="rounded-md border border-black/10 bg-[#F7F6F2] p-3 text-sm">
-                        Attached firearm ID: <b>{form.gun_uid}</b>
+                        Attached firearm:{' '}
+                        <b>
+                          {selectedGun ? `${selectedGun.make} ${selectedGun.model} (ID ${selectedGun.id})` : `ID ${form.gun_uid}`}
+                        </b>
                       </div>
                     )}
 
@@ -627,9 +653,7 @@ export default function DealerApplicationPage() {
         </div>
       </div>
 
-      {/* FLOATING TRACK BUTTON */}
-     <TrackFloater trackRouteBase="/dealer/audit/track" />
-
+      <TrackFloater trackRouteBase="/dealer/audit/track" />
     </div>
   )
 }
