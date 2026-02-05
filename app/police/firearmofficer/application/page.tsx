@@ -113,10 +113,10 @@ export default function FirearmOfficerApplicationsPage() {
       }
 
       const { data, error } = await supabase
-        .from('applications')
-        .select('*')
-        .eq('officer_email', user.email)
-        .order('created_at', { ascending: false })
+  .from('applications')
+  .select('*')
+  .eq('officer_auth_uid', user.id) // ✅ only THIS officer user
+  .order('created_at', { ascending: false })
 
       if (error) {
         // keep it simple like your other pages

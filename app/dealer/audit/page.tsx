@@ -6,13 +6,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import NavPage from '../nav/page'
 import { supabase } from '@/lib/supabase/client'
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card'
+import TrackFloater from '@/components/TrackFloater'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -56,10 +51,11 @@ export default function DealerAuditPage() {
       setLoading(true)
 
       const {
-        data: { user },
-      } = await supabase.auth.getUser()
+        data: { session },
+      } = await supabase.auth.getSession()
 
-      if (!user?.email) {
+      const email = session?.user?.email || null
+      if (!email) {
         setApps([])
         setResults({})
         setLoading(false)
@@ -71,10 +67,9 @@ export default function DealerAuditPage() {
 
       const base = supabase
         .from('applications')
-        .select(
-          'id, application_uid, applicant_name, national_id, status, created_at, officer_email, gun_uid'
-        )
-        .eq('applicant_email', user.email)
+        .select('id, application_uid, applicant_name, national_id, status, created_at, officer_email, gun_uid')
+        // ✅ show apps where dealer is owner either way
+        .or(`applicant_email.eq.${email},created_by_email.eq.${email}`)
         .order('created_at', { ascending: false })
         .range(from, to)
 
@@ -102,7 +97,7 @@ export default function DealerAuditPage() {
         return
       }
 
-      const ids = rows.map((r) => r.id)
+      const ids = rows.map(r => r.id)
 
       const res = await supabase
         .from('application_results')
@@ -122,7 +117,7 @@ export default function DealerAuditPage() {
       })
 
       const filled: Record<number, ResultRow | null> = {}
-      ids.forEach((id) => {
+      ids.forEach(id => {
         filled[id] = map[id] ?? null
       })
       setResults(filled)
@@ -134,8 +129,8 @@ export default function DealerAuditPage() {
   }, [page, query])
 
   const rows: Row[] = useMemo(() => {
-    const list: Row[] = apps.map((a) => ({ ...a, result: results[a.id] ?? null }))
-    return list.filter((r) => {
+    const list: Row[] = apps.map(a => ({ ...a, result: results[a.id] ?? null }))
+    return list.filter(r => {
       if (filter === 'approved') return r.result?.result === 'approved'
       if (filter === 'declined') return r.result?.result === 'declined'
       if (filter === 'open') return r.result === null
@@ -179,24 +174,18 @@ export default function DealerAuditPage() {
                 <Input
                   placeholder="Search UID, National ID, Name…"
                   value={query}
-                  onChange={(e) => {
+                  onChange={e => {
                     setPage(0)
                     setQuery(e.target.value)
                   }}
                   className="max-w-sm"
                 />
 
-                <Button
-                  variant={filter === 'all' ? 'default' : 'outline'}
-                  onClick={() => setFilter('all')}
-                >
+                <Button variant={filter === 'all' ? 'default' : 'outline'} onClick={() => setFilter('all')}>
                   All
                 </Button>
 
-                <Button
-                  variant={filter === 'open' ? 'default' : 'outline'}
-                  onClick={() => setFilter('open')}
-                >
+                <Button variant={filter === 'open' ? 'default' : 'outline'} onClick={() => setFilter('open')}>
                   Open
                 </Button>
 
@@ -238,7 +227,7 @@ export default function DealerAuditPage() {
                     </thead>
 
                     <tbody>
-                      {rows.map((r) => {
+                      {rows.map(r => {
                         const walletId = (r.result?.wallet_id ?? '').trim()
                         const isApproved = r.result?.result === 'approved'
                         const isDeclined = r.result?.result === 'declined'
@@ -293,7 +282,7 @@ export default function DealerAuditPage() {
                   <Button
                     variant="outline"
                     disabled={page === 0 || loading}
-                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    onClick={() => setPage(p => Math.max(0, p - 1))}
                   >
                     Prev
                   </Button>
@@ -301,7 +290,7 @@ export default function DealerAuditPage() {
                   <Button
                     variant="outline"
                     disabled={loading || apps.length < PAGE_SIZE}
-                    onClick={() => setPage((p) => p + 1)}
+                    onClick={() => setPage(p => p + 1)}
                   >
                     Next
                   </Button>
@@ -311,6 +300,8 @@ export default function DealerAuditPage() {
           </Card>
         </div>
       </div>
+
+      <TrackFloater trackRouteBase="/dealer/audit/track" />
     </div>
   )
 }

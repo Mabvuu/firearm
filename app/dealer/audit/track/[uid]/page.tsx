@@ -1,13 +1,12 @@
+// app/dealer/audit/track/[uid]/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
 import NavPage from '../../../nav/page'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 
 type Application = {
@@ -32,57 +31,63 @@ type EventRow = {
   created_at: string
 }
 
-export default function TrackingPage({ params }: { params: { uid: string } }) {
-  const router = useRouter()
-  const uid = params.uid
+type TimelineResponse = {
+  application: Application | null
+  events: EventRow[]
+  error?: string
+}
+
+export default function TrackingPage({ params }: { params: Promise<{ uid: string }> }) {
+  const { uid } = React.use(params)
 
   const [loading, setLoading] = useState(true)
   const [application, setApplication] = useState<Application | null>(null)
   const [events, setEvents] = useState<EventRow[]>([])
   const [error, setError] = useState<string | null>(null)
 
-  // floater modal state
-  const [openTracker, setOpenTracker] = useState(false)
-  const [trackInput, setTrackInput] = useState('')
-  const [trackError, setTrackError] = useState<string | null>(null)
-
   useEffect(() => {
     const load = async () => {
       setLoading(true)
       setError(null)
 
-      const res = await fetch(`/api/applications/${uid}/timeline`)
-      const data = await res.json()
+      try {
+        const res = await fetch(`/api/applications/${encodeURIComponent(uid)}/timeline`)
 
-      if (!res.ok) {
-        setError(data?.error ?? 'Failed to load timeline')
+        const contentType = res.headers.get('content-type') || ''
+        const isJson = contentType.includes('application/json')
+
+        if (!isJson) {
+          setError('Tracking API returned non-JSON (route missing?)')
+          setApplication(null)
+          setEvents([])
+          setLoading(false)
+          return
+        }
+
+        const data: TimelineResponse = await res.json()
+
+        if (!res.ok) {
+          setError(data.error ?? 'Failed to load timeline')
+          setApplication(null)
+          setEvents([])
+          setLoading(false)
+          return
+        }
+
+        setApplication(data.application ?? null)
+        setEvents(data.events ?? [])
+        setLoading(false)
+      } catch (e) {
+        console.error(e)
+        setError('Failed to load timeline')
         setApplication(null)
         setEvents([])
         setLoading(false)
-        return
       }
-
-      setApplication(data.application ?? null)
-      setEvents(data.events ?? [])
-      setLoading(false)
     }
 
-    void load()
+    if (uid) void load()
   }, [uid])
-
-  const goTrack = () => {
-    const cleaned = trackInput.trim()
-    if (!cleaned) {
-      setTrackError('Enter an application UID')
-      return
-    }
-
-    // route where THIS page lives: /dealer/audit/track/[uid]
-    setOpenTracker(false)
-    setTrackInput('')
-    setTrackError(null)
-    router.push(`/dealer/audit/track/${encodeURIComponent(cleaned)}`)
-  }
 
   return (
     <div className="flex min-h-screen bg-[#F7F6F2]">
@@ -189,62 +194,6 @@ export default function TrackingPage({ params }: { params: { uid: string } }) {
           </Card>
         </div>
       </div>
-
-      {/* FLOATING TRACK BUTTON */}
-      <button
-        type="button"
-        onClick={() => {
-          setOpenTracker(true)
-          setTrackError(null)
-          setTrackInput('')
-        }}
-        className="fixed bottom-6 right-6 z-50 rounded-full px-5 py-3 text-white shadow-lg"
-        style={{ backgroundColor: '#2F4F6F' }}
-      >
-        Track
-      </button>
-
-      {/* FLOATING MODAL */}
-      {openTracker && (
-        <div className="fixed inset-0 z-[60]">
-          {/* backdrop */}
-          <div
-            className="absolute inset-0 bg-black/40"
-            onClick={() => setOpenTracker(false)}
-          />
-
-          {/* modal */}
-          <div className="absolute bottom-20 right-6 w-[360px] max-w-[90vw] rounded-xl border border-black/10 bg-white shadow-xl">
-            <div className="p-4 border-b border-black/10">
-              <div className="text-base font-semibold text-[#1F2A35]">Track an application</div>
-              <div className="text-xs text-muted-foreground">Enter the application UID.</div>
-            </div>
-
-            <div className="p-4 space-y-3">
-              <Input
-                placeholder="e.g. APP-000123 or UID"
-                value={trackInput}
-                onChange={e => setTrackInput(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') goTrack()
-                  if (e.key === 'Escape') setOpenTracker(false)
-                }}
-              />
-
-              {trackError ? <div className="text-xs text-red-600">{trackError}</div> : null}
-
-              <div className="flex gap-2 justify-end">
-                <Button variant="outline" onClick={() => setOpenTracker(false)}>
-                  Cancel
-                </Button>
-                <Button className="text-white" style={{ backgroundColor: '#2F4F6F' }} onClick={goTrack}>
-                  Track
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
