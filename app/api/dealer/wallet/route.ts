@@ -1,61 +1,49 @@
-// app/api/dealer/wallet/route.ts
-import { NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import { Keypair } from '@solana/web3.js'
-import bs58 from 'bs58'
+export const runtime = 'nodejs'
+export const dynamic = 'force-dynamic'
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+import { NextResponse } from 'next/server'
+import { supabaseAdmin } from '@/lib/supabase/admin'
+
+type Body = { dealer_id: string }
+
+function json(status: number, payload: unknown) {
+  return NextResponse.json(payload, { status })
+}
+
+function parseBody(x: unknown): Body {
+  if (!x || typeof x !== 'object') throw new Error('Invalid JSON body')
+  const o = x as Record<string, unknown>
+  const dealer_id = String(o.dealer_id || '')
+  if (!dealer_id) throw new Error('Missing dealer_id')
+  return { dealer_id }
+}
 
 export async function POST(req: Request) {
-  const body = (await req.json().catch(() => null)) as { dealerId?: string } | null
-  const dealerId = body?.dealerId
+  try {
+    const { dealer_id } = parseBody(await req.json())
 
-  if (!dealerId) {
-    return NextResponse.json({ ok: false, error: 'Missing dealerId' }, { status: 400 })
-  }
+    const { data: prof, error } = await supabaseAdmin
+      .from('profiles')
+      .select('role, national_id, dealer_wallet_address, personal_wallet_address')
+      .eq('auth_uid', dealer_id)
+      .maybeSingle()
 
-  const { data: existing, error: exErr } = await supabaseAdmin
-    .from('dealer_wallets')
-    .select('dealer_id,wallet_pubkey,credits')
-    .eq('dealer_id', dealerId)
-    .maybeSingle()
+    if (error) return json(500, { ok: false, error: error.message })
+    if (!prof) return json(404, { ok: false, error: 'Profile not found' })
+    if (prof.role !== 'dealer') return json(403, { ok: false, error: 'Not a dealer' })
 
-  if (exErr) {
-    return NextResponse.json({ ok: false, error: exErr.message }, { status: 500 })
-  }
+    // business wallet defaults to national_id
+    const dealer_wallet_address = prof.dealer_wallet_address || prof.national_id || null
+    const personal_wallet_address = prof.personal_wallet_address || null
 
-  if (existing) {
-    return NextResponse.json({
+    return json(200, {
       ok: true,
-      wallet_pubkey: existing.wallet_pubkey,
-      credits: existing.credits,
+      dealer_wallet_address,
+      personal_wallet_address,
+      national_id: prof.national_id,
     })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return json(500, { ok: false, error: msg })
   }
-
-  const kp = Keypair.generate()
-  const secret58 = bs58.encode(kp.secretKey)
-
-  const { data, error } = await supabaseAdmin
-    .from('dealer_wallets')
-    .insert({
-      dealer_id: dealerId,
-      wallet_pubkey: kp.publicKey.toBase58(),
-      wallet_secret_enc: secret58, // STORED PLAIN TEXT (DEV ONLY)
-      credits: 0,
-    })
-    .select('wallet_pubkey,credits')
-    .single()
-
-  if (error) {
-    return NextResponse.json({ ok: false, error: error.message }, { status: 500 })
-  }
-
-  return NextResponse.json({
-    ok: true,
-    wallet_pubkey: data.wallet_pubkey,
-    credits: data.credits,
-  })
 }

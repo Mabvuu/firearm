@@ -40,7 +40,9 @@ function pickNextGreeting(uid: string) {
 
   const lastIdx = Number(localStorage.getItem(lastIdxKey) ?? '-1')
   let idx = Math.floor(Math.random() * RETURNING_GREETINGS.length)
-  if (RETURNING_GREETINGS.length > 1 && idx === lastIdx) idx = (idx + 1) % RETURNING_GREETINGS.length
+  if (RETURNING_GREETINGS.length > 1 && idx === lastIdx) {
+    idx = (idx + 1) % RETURNING_GREETINGS.length
+  }
   localStorage.setItem(lastIdxKey, String(idx))
   return RETURNING_GREETINGS[idx]
 }
@@ -52,7 +54,6 @@ export default function NavPage() {
   const [mounted, setMounted] = useState(false)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [greeting, setGreeting] = useState('')
-
   const [credits, setCredits] = useState<number | null>(null)
 
   const navLinks = useMemo(
@@ -61,8 +62,13 @@ export default function NavPage() {
       { href: '/dealer/mint', label: 'Mint' },
       { href: '/dealer/application', label: 'Application' },
       { href: '/dealer/inventory', label: 'Inventory' },
+
+      // ✅ Wallet page
+      { href: '/wallet', label: 'Wallets' },
+
       { href: '/dealer/audit', label: 'Audit' },
       { href: '/dealer/firearm', label: 'Firearm' },
+      { href: '/blacklist', label: 'Blacklist' },
     ],
     []
   )
@@ -71,6 +77,7 @@ export default function NavPage() {
     const init = async () => {
       const { data: userRes } = await supabase.auth.getUser()
       const user = userRes.user
+
       if (!user) {
         setMounted(true)
         router.replace('/login')
@@ -85,19 +92,23 @@ export default function NavPage() {
         .eq('auth_uid', user.id)
         .maybeSingle()
 
-      if (!error && prof?.email && prof?.role) setProfile({ email: prof.email, role: prof.role })
-      else setProfile({ email: user.email ?? '', role: '' })
+      if (!error && prof?.email && prof?.role) {
+        setProfile({ email: prof.email, role: prof.role })
+      } else {
+        setProfile({ email: user.email ?? '', role: '' })
+      }
 
-      // ✅ NEW CREDITS SOURCE:
-      // dealer_credits(dealer_id = auth user id, balance)
       const { data: c, error: cErr } = await supabase
         .from('dealer_credits')
         .select('balance')
         .eq('dealer_id', user.id)
         .maybeSingle<DealerCreditsRow>()
 
-      if (!cErr && c) setCredits(typeof c.balance === 'number' ? c.balance : 0)
-      else setCredits(0)
+      if (!cErr && c) {
+        setCredits(typeof c.balance === 'number' ? c.balance : 0)
+      } else {
+        setCredits(0)
+      }
 
       setMounted(true)
     }
@@ -111,14 +122,17 @@ export default function NavPage() {
   }
 
   const linkBtn = (href: string, label: string) => {
-    const active = pathname === href
+    const active = pathname === href || pathname?.startsWith(href + '/')
+
     return (
       <Link key={href} href={href}>
         <Button
           variant="ghost"
           className={[
             'w-full justify-start',
-            active ? 'bg-[#2F4F6F]/15 text-[#1F2A35] font-semibold' : 'text-[#1F2A35]/90',
+            active
+              ? 'bg-[#2F4F6F]/15 text-[#1F2A35] font-semibold'
+              : 'text-[#1F2A35]/90',
             'hover:bg-[#2F4F6F]/10 hover:text-[#1F2A35]',
           ].join(' ')}
         >
@@ -155,11 +169,17 @@ export default function NavPage() {
         'border-r border-black/10',
       ].join(' ')}
     >
-      {/* Header panel */}
+      {/* Header */}
       <div className="mb-5 rounded-xl border border-black/10 bg-white p-3">
-        <div className="text-base font-semibold text-[#1F2A35]">{greeting}</div>
+        <div className="text-base font-semibold text-[#1F2A35]">
+          {greeting}
+        </div>
         <div className="mt-1 text-xs text-[#1F2A35]/70">
-          {profile?.role ? <span className="uppercase tracking-wide">{profile.role}</span> : <span>—</span>}
+          {profile?.role ? (
+            <span className="uppercase tracking-wide">{profile.role}</span>
+          ) : (
+            <span>—</span>
+          )}
           {profile?.email ? <span> • {profile.email}</span> : null}
         </div>
         <div className="mt-3 h-1 w-full rounded-full bg-[#2F4F6F]/15">
@@ -167,7 +187,7 @@ export default function NavPage() {
         </div>
       </div>
 
-      {/* ✅ Credits (no managed wallet display anymore) */}
+      {/* Credits */}
       <div className="mb-5 rounded-xl border border-black/10 bg-white p-3 space-y-2">
         <div className="text-xs text-[#1F2A35]/70">Mint credits</div>
 
@@ -178,22 +198,34 @@ export default function NavPage() {
               {credits === null ? '—' : credits}
             </div>
           </div>
-          <div className="mt-1 text-[11px] text-[#1F2A35]/60">1 mint = 1 credit</div>
+          <div className="mt-1 text-[11px] text-[#1F2A35]/60">
+            1 mint = 1 credit
+          </div>
         </div>
 
         <Link href="/dealer/renew">
-          <Button variant="outline" size="sm" className="w-full border-black/15 text-[#1F2A35]">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full border-black/15 text-[#1F2A35]"
+          >
             Renew / Buy Credits
           </Button>
         </Link>
       </div>
 
       {/* Navigation */}
-      <nav className="flex flex-col gap-1">{navLinks.map((l) => linkBtn(l.href, l.label))}</nav>
+      <nav className="flex flex-col gap-1">
+        {navLinks.map(l => linkBtn(l.href, l.label))}
+      </nav>
 
       {/* Logout */}
       <div className="mt-auto pt-6">
-        <Button className="w-full text-white" style={{ backgroundColor: '#B65A4A' }} onClick={handleLogout}>
+        <Button
+          className="w-full text-white"
+          style={{ backgroundColor: '#B65A4A' }}
+          onClick={handleLogout}
+        >
           Logout
         </Button>
       </div>

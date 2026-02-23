@@ -13,6 +13,14 @@ import { Input } from '@/components/ui/input'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 type Gun = {
   id: number
@@ -101,6 +109,24 @@ export default function DealerApplicationPage() {
   const [started, setStarted] = useState(false)
   const [createdUid, setCreatedUid] = useState<string | null>(null)
 
+  // ✅ blacklist state
+  const [blacklisted, setBlacklisted] = useState<{
+    active: boolean
+    reason: string
+    created_at: string
+  } | null>(null)
+
+  // ✅ popup (Dialog) for ALL notifications
+  const [popOpen, setPopOpen] = useState(false)
+  const [popTitle, setPopTitle] = useState('Message')
+  const [popText, setPopText] = useState('')
+
+  const pop = (title: string, text: string) => {
+    setPopTitle(title)
+    setPopText(text)
+    setPopOpen(true)
+  }
+
   const resetAll = () => {
     setStep(1)
     setStarted(false)
@@ -111,6 +137,7 @@ export default function DealerApplicationPage() {
     setGunQuery('')
     setShowOfficerPicker(false)
     setOfficerQuery('')
+    setBlacklisted(null)
     setForm({
       applicant_name: '',
       national_id: '',
@@ -131,7 +158,7 @@ export default function DealerApplicationPage() {
 
     if (error) {
       console.error(error)
-      alert('Failed to load firearms')
+      pop('Oops', 'Failed to load firearms.')
       return
     }
 
@@ -139,9 +166,13 @@ export default function DealerApplicationPage() {
   }
 
   const loadOfficers = async () => {
-    const res = await fetch('/api/firearm-officers')
-    const data = await res.json()
-    setOfficers(data || [])
+    try {
+      const res = await fetch('/api/firearm-officers')
+      const data = await res.json()
+      setOfficers(data || [])
+    } catch {
+      pop('Oops', 'Failed to load officers.')
+    }
   }
 
   const filteredGuns = useMemo(() => {
@@ -168,16 +199,42 @@ export default function DealerApplicationPage() {
   const next = () => setStep(s => (s < 4 ? ((s + 1) as Step) : s))
   const back = () => setStep(s => (s > 1 ? ((s - 1) as Step) : s))
 
-  // ✅ HARD CHECK: only minted guns can be submitted (even if someone bypasses the picker)
   const ensureSelectedGunIsMinted = async (gunId: number) => {
-    const { data, error } = await supabase
-      .from('inventory')
-      .select('id, minted')
-      .eq('id', gunId)
-      .maybeSingle()
-
+    const { data, error } = await supabase.from('inventory').select('id, minted').eq('id', gunId).maybeSingle()
     if (error) throw error
     return !!data?.minted
+  }
+
+  const checkPersonBlacklist = async (nationalId: string) => {
+    const nid = nationalId.trim()
+    if (!nid) {
+      setBlacklisted(null)
+      return null
+    }
+
+    const { data, error } = await supabase
+      .from('blacklist')
+      .select('reason, created_at, active')
+      .eq('kind', 'PERSON')
+      .eq('national_id', nid)
+      .eq('active', true)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (error) {
+      console.error(error)
+      setBlacklisted(null)
+      return null
+    }
+
+    const row = (data ?? [])?.[0] as { reason: string; created_at: string; active: boolean } | undefined
+    if (row?.active) {
+      setBlacklisted(row)
+      return row
+    }
+
+    setBlacklisted(null)
+    return null
   }
 
   const submitApplication = async () => {
@@ -193,34 +250,40 @@ export default function DealerApplicationPage() {
       const user = session?.user
 
       if (sessErr || !token || !user?.email) {
-        alert('Not logged in')
+        pop('Not logged in', 'Please log in first.')
         setSubmitting(false)
         return
       }
 
       if (!canNextFromStep1()) {
-        alert('Fill in applicant info')
+        pop('Missing info', 'Please fill in all applicant fields (including province + district).')
+        setSubmitting(false)
+        return
+      }
+
+      const bl = await checkPersonBlacklist(form.national_id)
+      if (bl?.active) {
+        pop('Cannot start application', `This National ID is blacklisted.\nReason: ${bl.reason}`)
         setSubmitting(false)
         return
       }
 
       if (!form.gun_uid) {
-        alert('Select a firearm')
+        pop('Missing info', 'Please select a firearm.')
         setSubmitting(false)
         return
       }
 
-      // ✅ enforce minted only
       const okMinted = await ensureSelectedGunIsMinted(form.gun_uid)
       if (!okMinted) {
-        alert('This firearm is NOT minted yet. Mint it first.')
+        pop('Not allowed', 'This firearm is NOT minted yet. Mint it first.')
         setForm(f => ({ ...f, gun_uid: null }))
         setSubmitting(false)
         return
       }
 
       if (!form.officer_email) {
-        alert('Select an officer')
+        pop('Missing info', 'Please select an officer.')
         setSubmitting(false)
         return
       }
@@ -233,7 +296,7 @@ export default function DealerApplicationPage() {
 
         if (upErr) {
           console.error(upErr)
-          alert('File upload failed')
+          pop('Upload failed', 'One of your files failed to upload. Try again.')
           setSubmitting(false)
           return
         }
@@ -264,7 +327,7 @@ export default function DealerApplicationPage() {
 
       if (!res.ok) {
         console.error(data)
-        alert(data?.error || 'Application failed')
+        pop('Application failed', data?.error || 'Something went wrong.')
         setSubmitting(false)
         return
       }
@@ -272,9 +335,10 @@ export default function DealerApplicationPage() {
       setCreatedUid(String(data.application_uid ?? ''))
       setStarted(true)
       setSubmitting(false)
+      pop('Done', 'Application started successfully.')
     } catch (err) {
       console.error(err)
-      alert('Unexpected error')
+      pop('Unexpected error', 'Something went wrong. Please try again.')
       setSubmitting(false)
     }
   }
@@ -304,16 +368,23 @@ export default function DealerApplicationPage() {
                   </Button>
 
                   <Button asChild className="text-white" style={{ backgroundColor: '#2F4F6F' }}>
-                    <Link
-                      href={
-                        createdUid
-                          ? `/dealer/audit/track/${encodeURIComponent(createdUid)}`
-                          : '/dealer/audit'
-                      }
-                    >
+                    <Link href={createdUid ? `/dealer/audit/track/${encodeURIComponent(createdUid)}` : '/dealer/audit'}>
                       Track it
                     </Link>
                   </Button>
+                </div>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* (optional) keep banner too */}
+          {blacklisted?.active && (
+            <Alert variant="destructive">
+              <AlertTitle>Cannot start application</AlertTitle>
+              <AlertDescription>
+                This National ID is blacklisted.
+                <div className="mt-2 text-sm">
+                  <b>Reason:</b> {blacklisted.reason}
                 </div>
               </AlertDescription>
             </Alert>
@@ -324,13 +395,7 @@ export default function DealerApplicationPage() {
               <h1 className="text-2xl font-bold text-[#1F2A35]">New Firearm Application</h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 Step {step} of 4 —{' '}
-                {step === 1
-                  ? 'Applicant info'
-                  : step === 2
-                    ? 'Select firearm'
-                    : step === 3
-                      ? 'Select officer'
-                      : 'Send'}
+                {step === 1 ? 'Applicant info' : step === 2 ? 'Select firearm' : step === 3 ? 'Select officer' : 'Send'}
               </p>
             </div>
 
@@ -378,7 +443,15 @@ export default function DealerApplicationPage() {
                       <Input
                         placeholder="National ID"
                         value={form.national_id}
-                        onChange={e => setForm({ ...form, national_id: e.target.value })}
+                        onChange={e => {
+                          const v = e.target.value
+                          setForm({ ...form, national_id: v })
+                          setBlacklisted(null)
+                        }}
+                        onBlur={async () => {
+                          const bl = await checkPersonBlacklist(form.national_id)
+                          if (bl?.active) pop('Blacklisted', `This National ID is blacklisted.\nReason: ${bl.reason}`)
+                        }}
                       />
                       <Input
                         placeholder="Address"
@@ -418,9 +491,7 @@ export default function DealerApplicationPage() {
                           disabled={!form.province}
                           onChange={e => setForm({ ...form, district: e.target.value })}
                         >
-                          <option value="">
-                            {form.province ? 'Select district…' : 'Select province first…'}
-                          </option>
+                          <option value="">{form.province ? 'Select district…' : 'Select province first…'}</option>
                           {districtsForProvince.map(d => (
                             <option key={d} value={d}>
                               {d}
@@ -463,18 +534,14 @@ export default function DealerApplicationPage() {
                       <div className="rounded-md border border-black/10 bg-[#F7F6F2] p-3 text-sm">
                         Attached firearm:{' '}
                         <b>
-                          {selectedGun ? `${selectedGun.make} ${selectedGun.model} (ID ${selectedGun.id})` : `ID ${form.gun_uid}`}
+                          {selectedGun ? `${selectedGun.make} ${selectedGun.model} (${selectedGun.serial ?? '-'})` : `ID ${form.gun_uid}`}
                         </b>
                       </div>
                     )}
 
                     {showGunPicker && (
                       <div className="rounded-md border border-black/10 bg-white p-3 space-y-2">
-                        <Input
-                          placeholder="Search firearm"
-                          value={gunQuery}
-                          onChange={e => setGunQuery(e.target.value)}
-                        />
+                        <Input placeholder="Search firearm" value={gunQuery} onChange={e => setGunQuery(e.target.value)} />
 
                         <div className="max-h-56 overflow-y-auto rounded border border-black/5">
                           {filteredGuns.length === 0 ? (
@@ -494,7 +561,7 @@ export default function DealerApplicationPage() {
                                   {g.make} {g.model}
                                 </div>
                                 <div className="text-xs text-muted-foreground">
-                                  {g.serial ?? '-'} • {g.caliber ?? '-'} • ID {g.id}
+                                  {g.serial ?? '-'} • {g.caliber ?? '-'}
                                 </div>
                               </button>
                             ))
@@ -527,11 +594,7 @@ export default function DealerApplicationPage() {
 
                     {showOfficerPicker && (
                       <div className="rounded-md border border-black/10 bg-white p-3 space-y-2">
-                        <Input
-                          placeholder="Search officer email"
-                          value={officerQuery}
-                          onChange={e => setOfficerQuery(e.target.value)}
-                        />
+                        <Input placeholder="Search officer email" value={officerQuery} onChange={e => setOfficerQuery(e.target.value)} />
 
                         <div className="max-h-56 overflow-y-auto rounded border border-black/5">
                           {filteredOfficers.length === 0 ? (
@@ -573,7 +636,7 @@ export default function DealerApplicationPage() {
                         <b>Location:</b> {form.province} / {form.district}
                       </div>
                       <div>
-                        <b>Firearm ID:</b> {form.gun_uid ?? '-'}
+                        <b>Firearm:</b> {selectedGun ? `${selectedGun.make} ${selectedGun.model} (${selectedGun.serial ?? '-'})` : '-'}
                       </div>
                       <div>
                         <b>Officer:</b> {form.officer_email || '-'}
@@ -586,11 +649,11 @@ export default function DealerApplicationPage() {
                     <Button
                       type="button"
                       onClick={submitApplication}
-                      disabled={submitting}
+                      disabled={submitting || !!blacklisted?.active}
                       className="w-full text-white"
                       style={{ backgroundColor: '#2F4F6F' }}
                     >
-                      {submitting ? 'Sending…' : 'Send'}
+                      {submitting ? 'Sending…' : blacklisted?.active ? 'Blocked (Blacklisted)' : 'Send'}
                     </Button>
 
                     <div className="text-xs text-muted-foreground">After sending, use “Track it” above.</div>
@@ -607,11 +670,14 @@ export default function DealerApplicationPage() {
                       <Button
                         className="text-white"
                         style={{ backgroundColor: '#2F4F6F' }}
-                        onClick={() => {
-                          if (step === 1 && !canNextFromStep1())
-                            return alert('Fill in all applicant fields + select province/district')
-                          if (step === 2 && !canNextFromStep2()) return alert('Select a firearm')
-                          if (step === 3 && !canNextFromStep3()) return alert('Select an officer')
+                        onClick={async () => {
+                          if (step === 1) {
+                            if (!canNextFromStep1()) return pop('Missing info', 'Fill in all applicant fields + select province/district.')
+                            const bl = await checkPersonBlacklist(form.national_id)
+                            if (bl?.active) return pop('Blacklisted', `This National ID is blacklisted.\nReason: ${bl.reason}`)
+                          }
+                          if (step === 2 && !canNextFromStep2()) return pop('Missing info', 'Please select a firearm.')
+                          if (step === 3 && !canNextFromStep3()) return pop('Missing info', 'Please select an officer.')
                           next()
                         }}
                         disabled={submitting}
@@ -638,7 +704,7 @@ export default function DealerApplicationPage() {
                     <b>District:</b> {form.district || '-'}
                   </div>
                   <div>
-                    <b>Firearm:</b> {form.gun_uid ?? '-'}
+                    <b>Firearm:</b> {selectedGun ? `${selectedGun.make} ${selectedGun.model} (${selectedGun.serial ?? '-'})` : '-'}
                   </div>
                   <div>
                     <b>Officer:</b> {form.officer_email || '-'}
@@ -654,6 +720,19 @@ export default function DealerApplicationPage() {
       </div>
 
       <TrackFloater trackRouteBase="/dealer/audit/track" />
+
+      {/* ✅ ALL NOTIFICATIONS POPUP */}
+      <Dialog open={popOpen} onOpenChange={setPopOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{popTitle}</DialogTitle>
+            <DialogDescription style={{ whiteSpace: 'pre-line' }}>{popText}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button onClick={() => setPopOpen(false)}>OK</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

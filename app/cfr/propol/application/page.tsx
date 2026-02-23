@@ -1,7 +1,7 @@
 // app/cfr/propol/application/page.tsx
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import NavPage from '../nav/page'
 import { supabase } from '@/lib/supabase/client'
@@ -84,7 +84,7 @@ const competencySelect =
 const toLabel = (raw: string) =>
   raw
     .replace(/_/g, ' ')
-    .replace(/\b\w/g, m => m.toUpperCase())
+    .replace(/\b\w/g, (m) => m.toUpperCase())
     .trim()
 
 const statusBadgeVariant = (
@@ -174,14 +174,14 @@ export default function CFRPropolApplicationsPage() {
         .eq('id', gunId)
         .maybeSingle()
 
-      setGuns(prev => ({
+      setGuns((prev) => ({
         ...prev,
         [gunId]: error ? null : ((data as Gun) ?? null),
       }))
     }
 
-    apps.forEach(a => {
-      if (a.gun_uid) loadGun(a.gun_uid)
+    apps.forEach((a) => {
+      if (a.gun_uid) void loadGun(a.gun_uid)
     })
   }, [apps])
 
@@ -196,14 +196,14 @@ export default function CFRPropolApplicationsPage() {
         .eq('id', compId)
         .maybeSingle()
 
-      setCompetencies(prev => ({
+      setCompetencies((prev) => ({
         ...prev,
         [compId]: error ? null : ((data as CompetencyFull) ?? null),
       }))
     }
 
-    apps.forEach(a => {
-      if (a.competency_id) loadCompetency(a.competency_id)
+    apps.forEach((a) => {
+      if (a.competency_id) void loadCompetency(a.competency_id)
     })
   }, [apps])
 
@@ -211,7 +211,7 @@ export default function CFRPropolApplicationsPage() {
     const q = query.trim().toLowerCase()
     if (!q) return apps
 
-    return apps.filter(a => {
+    return apps.filter((a) => {
       const gun = a.gun_uid ? guns[a.gun_uid] : null
       return (
         String(a.id).includes(q) ||
@@ -234,13 +234,7 @@ export default function CFRPropolApplicationsPage() {
     return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl
   }
 
-  const Field = ({
-    label,
-    value,
-  }: {
-    label: string
-    value: React.ReactNode
-  }) => (
+  const Field = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div className="space-y-1">
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className="text-sm font-medium break-words">{value}</div>
@@ -258,9 +252,7 @@ export default function CFRPropolApplicationsPage() {
         <Badge variant={ok ? 'destructive' : 'outline'}>{ok ? 'Yes' : 'No'}</Badge>
       </div>
       {ok && (details ?? '').trim() ? (
-        <div className="mt-2 text-xs text-muted-foreground whitespace-pre-wrap">
-          {details}
-        </div>
+        <div className="mt-2 text-xs text-muted-foreground whitespace-pre-wrap">{details}</div>
       ) : null}
     </div>
   )
@@ -290,6 +282,33 @@ export default function CFRPropolApplicationsPage() {
         </div>
       </div>
     </div>
+  )
+
+  // ✅ FIX: AccordionTrigger is a <button>.
+  // You cannot put a <Button> (also <button>) inside it.
+  // Use a <span> styled like a button (or Button asChild with span).
+  const ContinueChip = ({ appId }: { appId: number }) => (
+    <span
+      role="button"
+      tabIndex={0}
+      className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors
+                 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50
+                 bg-secondary text-secondary-foreground hover:bg-secondary/80 h-9 px-3"
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        router.push(`/cfr/propol/application/add-attachment?appId=${appId}`)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          e.stopPropagation()
+          router.push(`/cfr/propol/application/add-attachment?appId=${appId}`)
+        }
+      }}
+    >
+      Continue
+    </span>
   )
 
   if (loading) {
@@ -332,7 +351,7 @@ export default function CFRPropolApplicationsPage() {
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
               <Input
                 value={query}
-                onChange={e => setQuery(e.target.value)}
+                onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search: name, ID, status, serial…"
                 className="sm:w-[320px]"
               />
@@ -359,7 +378,7 @@ export default function CFRPropolApplicationsPage() {
                 </div>
               ) : (
                 <Accordion type="multiple" className="space-y-3">
-                  {filtered.map(app => {
+                  {filtered.map((app) => {
                     const gun = app.gun_uid ? guns[app.gun_uid] : null
                     const comp = app.competency_id ? competencies[app.competency_id] : null
 
@@ -377,12 +396,8 @@ export default function CFRPropolApplicationsPage() {
 
                             <div className="flex-1 text-left">
                               <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                                <div className="text-sm font-semibold">
-                                  {app.applicant_name}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  #{app.id}
-                                </div>
+                                <div className="text-sm font-semibold">{app.applicant_name}</div>
+                                <div className="text-xs text-muted-foreground">#{app.id}</div>
                               </div>
 
                               <div className="mt-1 text-xs text-muted-foreground">
@@ -394,9 +409,7 @@ export default function CFRPropolApplicationsPage() {
                                   {toLabel(app.status)}
                                 </Badge>
 
-                                <Badge variant="outline">
-                                  Created: {formatDateTime(app.created_at)}
-                                </Badge>
+                                <Badge variant="outline">Created: {formatDateTime(app.created_at)}</Badge>
 
                                 {app.gun_uid ? (
                                   <Badge variant="outline">Gun ID: {app.gun_uid}</Badge>
@@ -406,18 +419,9 @@ export default function CFRPropolApplicationsPage() {
                               </div>
                             </div>
 
+                            {/* ✅ FIXED: no nested button */}
                             <div className="pt-1">
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={e => {
-                                  e.preventDefault()
-                                  e.stopPropagation()
-                                  router.push(`/cfr/propol/application/add-attachment?appId=${app.id}`)
-                                }}
-                              >
-                                Continue
-                              </Button>
+                              <ContinueChip appId={app.id} />
                             </div>
                           </div>
                         </AccordionTrigger>
@@ -447,27 +451,37 @@ export default function CFRPropolApplicationsPage() {
                               <Separator className="my-3" />
                               <div className="grid gap-3 sm:grid-cols-2">
                                 <div className="rounded-md border p-3">
-                                  <div className="text-xs text-muted-foreground">Forwarded by Firearm Officer</div>
+                                  <div className="text-xs text-muted-foreground">
+                                    Forwarded by Firearm Officer
+                                  </div>
                                   <div className="mt-1 text-sm font-medium">{app.forwarded_by_email || '-'}</div>
-                                  <div className="mt-1 text-xs text-muted-foreground">UID: {app.forwarded_by_uid || '-'}</div>
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    UID: {app.forwarded_by_uid || '-'}
+                                  </div>
                                 </div>
 
                                 <div className="rounded-md border p-3">
                                   <div className="text-xs text-muted-foreground">Approved by OIC</div>
                                   <div className="mt-1 text-sm font-medium">{app.oic_approved_by_email || '-'}</div>
-                                  <div className="mt-1 text-xs text-muted-foreground">UID: {app.oic_approved_by_uid || '-'}</div>
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    UID: {app.oic_approved_by_uid || '-'}
+                                  </div>
                                 </div>
 
                                 <div className="rounded-md border p-3">
                                   <div className="text-xs text-muted-foreground">Forwarded by CFR</div>
                                   <div className="mt-1 text-sm font-medium">{app.cfr_forwarded_by_email || '-'}</div>
-                                  <div className="mt-1 text-xs text-muted-foreground">UID: {app.cfr_forwarded_by_uid || '-'}</div>
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    UID: {app.cfr_forwarded_by_uid || '-'}
+                                  </div>
                                 </div>
 
                                 <div className="rounded-md border p-3">
                                   <div className="text-xs text-muted-foreground">Forwarded by District (Dispol)</div>
                                   <div className="mt-1 text-sm font-medium">{app.dispol_forwarded_by_email || '-'}</div>
-                                  <div className="mt-1 text-xs text-muted-foreground">UID: {app.dispol_forwarded_by_uid || '-'}</div>
+                                  <div className="mt-1 text-xs text-muted-foreground">
+                                    UID: {app.dispol_forwarded_by_uid || '-'}
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -504,7 +518,7 @@ export default function CFRPropolApplicationsPage() {
 
                               {app.attachments?.length ? (
                                 <div className="grid gap-2 sm:grid-cols-2">
-                                  {app.attachments.map(a => (
+                                  {app.attachments.map((a) => (
                                     <a
                                       key={a}
                                       href={getFileUrl(a)}
@@ -516,9 +530,7 @@ export default function CFRPropolApplicationsPage() {
                                         <div className="truncate text-sm font-medium group-hover:underline">
                                           {a.split('/').pop()}
                                         </div>
-                                        <div className="truncate text-xs text-muted-foreground">
-                                          {a}
-                                        </div>
+                                        <div className="truncate text-xs text-muted-foreground">{a}</div>
                                       </div>
                                       <Badge variant="outline">View</Badge>
                                     </a>
@@ -582,17 +594,12 @@ export default function CFRPropolApplicationsPage() {
                                 Use “Continue” to attach docs and proceed.
                               </div>
                               <div className="flex gap-2">
-                                <Button
-                                  variant="outline"
-                                  onClick={() => router.push('/cfr/propol')}
-                                >
+                                <Button variant="outline" onClick={() => router.back()}>
                                   Back
                                 </Button>
                                 <Button
                                   onClick={() =>
-                                    router.push(
-                                      `/cfr/propol/application/add-attachment?appId=${app.id}`
-                                    )
+                                    router.push(`/cfr/propol/application/add-attachment?appId=${app.id}`)
                                   }
                                 >
                                   Continue
@@ -609,7 +616,6 @@ export default function CFRPropolApplicationsPage() {
             </CardContent>
           </Card>
 
-          {/* Mobile nav hint (optional) */}
           <div className="md:hidden rounded-lg border bg-background p-4 text-sm text-muted-foreground">
             Tip: Open this page on a wider screen to see the sidebar navigation.
           </div>

@@ -62,6 +62,11 @@ export default function NavPage() {
       { href: '/cfr/dispol/application', label: 'Applications' },
       { href: '/cfr/dispol/applicants', label: 'Applicants' },
       { href: '/cfr/dispol/audit', label: 'Audit' },
+
+      // ✅ NEW: Wallets
+      { href: '/wallet', label: 'Wallets' },
+
+      { href: '/blacklist', label: 'Blacklist' },
     ],
     []
   )

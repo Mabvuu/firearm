@@ -60,7 +60,7 @@ function OICApprovalPageInner() {
       setApp((data as Application) ?? null)
     }
 
-    loadApp()
+    void loadApp()
   }, [appId])
 
   useEffect(() => {
@@ -83,7 +83,7 @@ function OICApprovalPageInner() {
       setCfrs((data as CFRPick[]) ?? [])
     }
 
-    loadCFRs()
+    void loadCFRs()
   }, [])
 
   const filtered = useMemo(() => {
@@ -220,11 +220,16 @@ function OICApprovalPageInner() {
                   <ul className="divide-y" style={{ borderColor: COLORS.naturalAluminum }}>
                     {filtered.map((c, idx) => (
                       <li key={c.email}>
-                        <button
-                          type="button"
+                        {/* ✅ FIX: not a <button>, so no nested <button> hydration error */}
+                        <div
+                          role="button"
+                          tabIndex={0}
                           className="w-full text-left px-3 py-2 hover:bg-muted transition flex items-center justify-between gap-3"
-                          onClick={() => sendToCFR(c)}
-                          disabled={!!sendingTo}
+                          onClick={() => void sendToCFR(c)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' || e.key === ' ') void sendToCFR(c)
+                          }}
+                          aria-disabled={!!sendingTo}
                         >
                           <div className="min-w-0">
                             <div className="text-sm font-medium truncate" style={{ color: COLORS.blackBlue }}>
@@ -240,10 +245,14 @@ function OICApprovalPageInner() {
                             className="h-9"
                             disabled={!!sendingTo}
                             style={{ backgroundColor: COLORS.blackBlue, color: COLORS.snowWhite }}
+                            onClick={e => {
+                              e.stopPropagation()
+                              void sendToCFR(c)
+                            }}
                           >
                             {sendingTo === c.email ? 'Sending…' : 'Send'}
                           </Button>
-                        </button>
+                        </div>
                       </li>
                     ))}
                   </ul>

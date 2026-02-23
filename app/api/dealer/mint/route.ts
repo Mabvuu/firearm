@@ -19,6 +19,7 @@ type MintBody = { inventory_id: number; dealer_id: string }
 
 type InventoryRow = {
   id: number
+  gun_uid: string
   serial: string | null
   make: string
   model: string
@@ -26,6 +27,9 @@ type InventoryRow = {
   date_of_import: string
   owner_id: string
   minted: boolean | null
+  minted_at?: string | null
+  status: string | null
+  mint_address: string | null
 }
 
 function json(status: number, payload: unknown) {
@@ -158,16 +162,20 @@ export async function POST(req: Request) {
 
     const { inventory_id, dealer_id } = parseBody(await req.json())
 
-    // 1) inventory check
+    // 1) inventory check (NOW includes gun_uid + mint fields)
     const { data: inv, error: invErr } = await supabaseAdmin
       .from('inventory')
-      .select('id,serial,make,model,caliber,date_of_import,owner_id,minted')
+      .select('id,gun_uid,serial,make,model,caliber,date_of_import,owner_id,minted,status,mint_address')
       .eq('id', inventory_id)
       .single<InventoryRow>()
 
     if (invErr || !inv) return json(404, { ok: false, error: 'Inventory item not found' })
     if (inv.owner_id !== dealer_id) return json(403, { ok: false, error: 'Not your inventory item' })
-    if (inv.minted) return json(400, { ok: false, error: 'Already minted' })
+
+    // 1b) block duplicates HARD
+    if (inv.mint_address || inv.minted || inv.status === 'minted') {
+      return json(409, { ok: false, error: 'Already minted', mint_address: inv.mint_address })
+    }
 
     // 2) consume 1 credit
     const ref = `inv:${inventory_id}`
@@ -241,18 +249,28 @@ export async function POST(req: Request) {
     })
     await connection.confirmTransaction({ signature: sig, blockhash, lastValidBlockHeight }, 'confirmed')
 
-    // 4) update DB minted
-    const { error: updErr } = await supabaseAdmin
-      .from('inventory')
-      .update({ minted: true, minted_at: new Date().toISOString() })
-      .eq('id', inventory_id)
+    // 4) update DB minted + save mint_address + status (race-safe)
+    const mintAddr = firearm.toBase58()
 
-    if (updErr) {
+    const { data: updated, error: updErr } = await supabaseAdmin
+      .from('inventory')
+      .update({
+        minted: true,
+        minted_at: new Date().toISOString(),
+        mint_address: mintAddr,
+        status: 'minted',
+      })
+      .eq('id', inventory_id)
+      .is('mint_address', null) // prevents double-mint race
+      .select('id')
+      .maybeSingle()
+
+    if (updErr || !updated) {
       await supabaseAdmin.rpc('refund_one_credit', { p_dealer_id: dealer_id, p_ref: ref })
-      return json(500, { ok: false, error: 'Minted on-chain but DB update failed (refunded)', txSig: sig })
+      return json(500, { ok: false, error: 'Minted on-chain but DB update failed (refunded)', txSig: sig, mint_address: mintAddr })
     }
 
-    return json(200, { ok: true, txSig: sig, firearmPda: firearm.toBase58() })
+    return json(200, { ok: true, txSig: sig, firearmPda: mintAddr, gun_uid: inv.gun_uid })
   } catch (e) {
     console.error('MINT API ERROR:', e)
     const msg = e instanceof Error ? e.message : String(e)

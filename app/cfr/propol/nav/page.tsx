@@ -51,7 +51,6 @@ const COLORS = {
   coolGreyMedium: '#ACACAC',
 } as const
 
-// ✅ map internal role → human label
 const ROLE_LABELS: Record<string, string> = {
   'cfr.propol': 'Provincial Police',
   propol: 'Provincial Police',
@@ -72,6 +71,11 @@ export default function NavPage() {
       { href: '/cfr/propol/applicants', label: 'Applicants' },
       { href: '/cfr/propol/audit', label: 'Audit' },
       { href: '/cfr/propol/profile', label: 'Profile' },
+
+      // ✅ NEW: Wallets
+      { href: '/wallet', label: 'Wallets' },
+
+      { href: '/blacklist', label: 'Blacklist' },
     ],
     []
   )
@@ -110,11 +114,9 @@ export default function NavPage() {
     router.push('/login')
   }
 
-  const isActive = (href: string) =>
-    pathname === href || pathname?.startsWith(href + '/')
+  const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/')
 
-  const roleLabel =
-    ROLE_LABELS[profile?.role ?? ''] ?? 'Provincial Police'
+  const roleLabel = ROLE_LABELS[profile?.role ?? ''] ?? 'Provincial Police'
 
   return (
     <aside
@@ -125,28 +127,16 @@ export default function NavPage() {
       <div className="mb-8">
         {!mounted ? (
           <div className="space-y-3">
-            <div
-              className="h-7 w-48 rounded"
-              style={{ backgroundColor: 'rgba(255,254,241,0.25)' }}
-            />
-            <div
-              className="h-4 w-64 rounded"
-              style={{ backgroundColor: 'rgba(255,254,241,0.18)' }}
-            />
+            <div className="h-7 w-48 rounded" style={{ backgroundColor: 'rgba(255,254,241,0.25)' }} />
+            <div className="h-4 w-64 rounded" style={{ backgroundColor: 'rgba(255,254,241,0.18)' }} />
           </div>
         ) : (
           <div className="space-y-1">
-            <div
-              className="text-xl font-semibold leading-tight"
-              style={{ color: COLORS.snowWhite }}
-            >
+            <div className="text-xl font-semibold leading-tight" style={{ color: COLORS.snowWhite }}>
               {greeting}
             </div>
 
-            <div
-              className="text-sm leading-snug"
-              style={{ color: COLORS.naturalAluminum }}
-            >
+            <div className="text-sm leading-snug" style={{ color: COLORS.naturalAluminum }}>
               {roleLabel}
               {profile?.email ? <span> • {profile.email}</span> : null}
             </div>
@@ -164,13 +154,9 @@ export default function NavPage() {
                 variant="ghost"
                 className="w-full justify-start h-11"
                 style={{
-                  backgroundColor: active
-                    ? 'rgba(255,254,241,0.14)'
-                    : 'transparent',
+                  backgroundColor: active ? 'rgba(255,254,241,0.14)' : 'transparent',
                   color: COLORS.snowWhite,
-                  border: active
-                    ? `1px solid ${COLORS.naturalAluminum}`
-                    : '1px solid transparent',
+                  border: active ? `1px solid ${COLORS.naturalAluminum}` : '1px solid transparent',
                 }}
               >
                 <span className="text-base">{l.label}</span>

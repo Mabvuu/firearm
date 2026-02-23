@@ -65,6 +65,12 @@ export default function NavPage() {
       { href: '/joc/mid/application', label: 'Applications' },
       { href: '/joc/mid/reports', label: 'Reports' },
       { href: '/joc/mid/profile', label: 'Profile' },
+
+      // ✅ NEW: Wallets
+      { href: '/wallet', label: 'Wallets' },
+
+      // ✅ Universal blacklist
+      { href: '/blacklist', label: 'Blacklist' },
     ],
     []
   )
@@ -125,9 +131,7 @@ export default function NavPage() {
             </div>
 
             <div className="text-sm leading-snug" style={{ color: COLORS.naturalAluminum }}>
-              <span className="font-medium">
-                {ROLE_LABEL[profile.role ?? 'joc.mid'] ?? 'JOC MID Officer'}
-              </span>
+              <span className="font-medium">{ROLE_LABEL[profile.role ?? 'joc.mid'] ?? 'JOC MID Officer'}</span>
               {profile.email ? <span> • {profile.email}</span> : null}
             </div>
           </div>

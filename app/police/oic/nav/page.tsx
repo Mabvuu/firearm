@@ -39,7 +39,6 @@ function pickGreeting(uid: string) {
   return RETURNING_GREETINGS[idx]
 }
 
-// 🎨 palette (same)
 const COLORS = {
   naturalAluminum: '#D9D8D6',
   blackBlue: '#212B37',
@@ -60,9 +59,12 @@ export default function NavPage() {
     () => [
       { href: '/police/oic/dashboard', label: 'Home' },
       { href: '/police/oic/application', label: 'Applications' },
-     
       { href: '/police/oic/records', label: 'Records' },
-      
+
+      // ✅ NEW: Wallets
+      { href: '/wallet', label: 'Wallets' },
+
+      { href: '/blacklist', label: 'Blacklist' },
     ],
     []
   )
@@ -85,7 +87,6 @@ export default function NavPage() {
         .eq('auth_uid', user.id)
         .maybeSingle()
 
-      // role fixed for this nav
       setProfile({
         email: prof?.email ?? user.email ?? '',
         role: 'police.oic',
@@ -102,7 +103,8 @@ export default function NavPage() {
     router.push('/login')
   }
 
-  const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/')
+  const isActive = (href: string) =>
+    pathname === href || pathname?.startsWith(href + '/')
 
   return (
     <aside
@@ -113,17 +115,33 @@ export default function NavPage() {
       <div className="mb-8">
         {!mounted ? (
           <div className="space-y-3">
-            <div className="h-7 w-48 rounded" style={{ backgroundColor: 'rgba(255,254,241,0.25)' }} />
-            <div className="h-4 w-64 rounded" style={{ backgroundColor: 'rgba(255,254,241,0.18)' }} />
+            <div
+              className="h-7 w-48 rounded"
+              style={{ backgroundColor: 'rgba(255,254,241,0.25)' }}
+            />
+            <div
+              className="h-4 w-64 rounded"
+              style={{ backgroundColor: 'rgba(255,254,241,0.18)' }}
+            />
           </div>
         ) : (
           <div className="space-y-1">
-            <div className="text-xl font-semibold leading-tight" style={{ color: COLORS.snowWhite }}>
+            <div
+              className="text-xl font-semibold leading-tight"
+              style={{ color: COLORS.snowWhite }}
+            >
               {greeting}
             </div>
 
-            <div className="text-sm leading-snug" style={{ color: COLORS.naturalAluminum }}>
-              {profile?.role ? <span className="capitalize">{profile.role}</span> : <span>—</span>}
+            <div
+              className="text-sm leading-snug"
+              style={{ color: COLORS.naturalAluminum }}
+            >
+              {profile?.role ? (
+                <span className="capitalize">{profile.role}</span>
+              ) : (
+                <span>—</span>
+              )}
               {profile?.email ? <span> • {profile.email}</span> : null}
             </div>
           </div>
@@ -140,9 +158,13 @@ export default function NavPage() {
                 variant="ghost"
                 className="w-full justify-start h-11"
                 style={{
-                  backgroundColor: active ? 'rgba(255,254,241,0.14)' : 'transparent',
+                  backgroundColor: active
+                    ? 'rgba(255,254,241,0.14)'
+                    : 'transparent',
                   color: COLORS.snowWhite,
-                  border: active ? `1px solid ${COLORS.naturalAluminum}` : '1px solid transparent',
+                  border: active
+                    ? `1px solid ${COLORS.naturalAluminum}`
+                    : '1px solid transparent',
                 }}
               >
                 <span className="text-base">{l.label}</span>

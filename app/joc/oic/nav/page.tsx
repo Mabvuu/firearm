@@ -51,7 +51,6 @@ const COLORS = {
   coolGreyMedium: '#ACACAC',
 } as const
 
-// ✅ role → human-readable label
 const ROLE_LABELS: Record<string, string> = {
   'joc.oic': 'JOC Officer In Charge',
   joc_oic: 'JOC Officer In Charge',
@@ -70,7 +69,12 @@ export default function NavPage() {
       { href: '/joc/oic/dashboard', label: 'Home' },
       { href: '/joc/oic/application', label: 'Applications' },
       { href: '/joc/oic/records', label: 'Records' },
-      
+
+      // ✅ NEW: Wallets
+      { href: '/wallet', label: 'Wallets' },
+
+      // ✅ Universal blacklist
+      { href: '/blacklist', label: 'Blacklist' },
     ],
     []
   )
@@ -109,11 +113,9 @@ export default function NavPage() {
     router.push('/login')
   }
 
-  const isActive = (href: string) =>
-    pathname === href || pathname?.startsWith(href + '/')
+  const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/')
 
-  const roleLabel =
-    ROLE_LABELS[profile?.role ?? ''] ?? 'JOC Officer In Charge'
+  const roleLabel = ROLE_LABELS[profile?.role ?? ''] ?? 'JOC Officer In Charge'
 
   return (
     <aside
@@ -124,28 +126,16 @@ export default function NavPage() {
       <div className="mb-8">
         {!mounted ? (
           <div className="space-y-3">
-            <div
-              className="h-7 w-48 rounded"
-              style={{ backgroundColor: 'rgba(255,254,241,0.25)' }}
-            />
-            <div
-              className="h-4 w-64 rounded"
-              style={{ backgroundColor: 'rgba(255,254,241,0.18)' }}
-            />
+            <div className="h-7 w-48 rounded" style={{ backgroundColor: 'rgba(255,254,241,0.25)' }} />
+            <div className="h-4 w-64 rounded" style={{ backgroundColor: 'rgba(255,254,241,0.18)' }} />
           </div>
         ) : (
           <div className="space-y-1">
-            <div
-              className="text-xl font-semibold leading-tight"
-              style={{ color: COLORS.snowWhite }}
-            >
+            <div className="text-xl font-semibold leading-tight" style={{ color: COLORS.snowWhite }}>
               {greeting}
             </div>
 
-            <div
-              className="text-sm leading-snug"
-              style={{ color: COLORS.naturalAluminum }}
-            >
+            <div className="text-sm leading-snug" style={{ color: COLORS.naturalAluminum }}>
               {roleLabel}
               {profile?.email ? <span> • {profile.email}</span> : null}
             </div>
@@ -163,13 +153,9 @@ export default function NavPage() {
                 variant="ghost"
                 className="w-full justify-start h-11"
                 style={{
-                  backgroundColor: active
-                    ? 'rgba(255,254,241,0.14)'
-                    : 'transparent',
+                  backgroundColor: active ? 'rgba(255,254,241,0.14)' : 'transparent',
                   color: COLORS.snowWhite,
-                  border: active
-                    ? `1px solid ${COLORS.naturalAluminum}`
-                    : '1px solid transparent',
+                  border: active ? `1px solid ${COLORS.naturalAluminum}` : '1px solid transparent',
                 }}
               >
                 <span className="text-base">{l.label}</span>

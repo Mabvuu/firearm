@@ -41,7 +41,7 @@ function pickGreeting(uid: string) {
   return RETURNING_GREETINGS[idx]
 }
 
-// 🎨 palette
+// palette
 const COLORS = {
   naturalAluminum: '#D9D8D6',
   blackBlue: '#212B37',
@@ -65,6 +65,12 @@ export default function NavPage() {
       { href: '/police/firearmofficer/competency', label: 'Competency' },
       { href: '/police/firearmofficer/applicant', label: 'Applicants' },
       { href: '/police/firearmofficer/audit', label: 'Audit' },
+
+      // ✅ NEW: Wallets
+      { href: '/wallet', label: 'Wallets' },
+
+      // ✅ Universal blacklist
+      { href: '/blacklist', label: 'Blacklist' },
     ],
     []
   )
@@ -119,19 +125,11 @@ export default function NavPage() {
           </div>
         ) : (
           <div className="space-y-1">
-            {/* 🔼 BIGGER GREETING */}
-            <div
-              className="text-xl font-semibold leading-tight"
-              style={{ color: COLORS.snowWhite }}
-            >
+            <div className="text-xl font-semibold leading-tight" style={{ color: COLORS.snowWhite }}>
               {greeting}
             </div>
 
-            {/* 🔼 BIGGER ROLE / EMAIL */}
-            <div
-              className="text-sm leading-snug"
-              style={{ color: COLORS.naturalAluminum }}
-            >
+            <div className="text-sm leading-snug" style={{ color: COLORS.naturalAluminum }}>
               {profile?.role ? <span className="capitalize">{profile.role}</span> : <span>—</span>}
               {profile?.email ? <span> • {profile.email}</span> : null}
             </div>
@@ -154,7 +152,6 @@ export default function NavPage() {
                   border: active ? `1px solid ${COLORS.naturalAluminum}` : '1px solid transparent',
                 }}
               >
-                {/* 🔼 BIGGER LINK TEXT */}
                 <span className="text-base">{l.label}</span>
               </Button>
             </Link>

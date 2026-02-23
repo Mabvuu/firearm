@@ -1,7 +1,7 @@
-// app/register/page.tsx
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,6 +10,8 @@ import toast from 'react-hot-toast'
 import { ROLES, Role } from '@/lib/roles'
 
 export default function RegisterPage() {
+  const router = useRouter()
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<Role>('dealer')
@@ -42,54 +44,91 @@ export default function RegisterPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <Card className="w-[360px]">
-        <CardHeader>
-          <CardTitle>Register</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Input
-            placeholder="Email"
-            value={email}
-            onChange={e => setEmail(e.target.value)}
-          />
-          <Input
-            placeholder="Password"
-            type="password"
-            value={password}
-            onChange={e => setPassword(e.target.value)}
-          />
+    <div className="min-h-screen bg-gradient-to-br from-indigo-100 via-white to-purple-100 flex items-center justify-center p-4">
 
-          <select
-            className="w-full border rounded-md h-10 px-3"
-            value={role}
-            onChange={e => setRole(e.target.value as Role)}
-          >
-            {ROLES.map(r => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
+      <div className="w-full max-w-sm sm:max-w-md space-y-4">
 
-          <Input
-            placeholder="National ID (verification only)"
-            value={nationalId}
-            onChange={e => setNationalId(e.target.value)}
-          />
+        {/* Back Button */}
+        <Button
+          variant="ghost"
+          className="rounded-md px-3 text-sm"
+          onClick={() => router.push('/')}
+        >
+          ← Back
+        </Button>
 
-          <Button className="w-full" onClick={handleRegister} disabled={loading}>
-            Register
-          </Button>
+        {/* Double Border Wrapper */}
+        <div className="border-4 border-neutral-300 rounded-3xl p-[3px]">
+          <div className="border border-neutral-300 rounded-3xl">
 
-          <div className="text-sm text-center">
-            Already have an account?{' '}
-            <Link href="/login" className="underline">
-              Login
-            </Link>
+            <Card className="bg-white shadow-xl rounded-3xl border-0">
+              <CardHeader className="text-center space-y-1 pt-8">
+                <CardTitle className="text-2xl font-bold">
+                  Create Account
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Register for system access
+                </p>
+              </CardHeader>
+
+              <CardContent className="space-y-4 pb-8 px-6 sm:px-8">
+
+                <Input
+                  placeholder="Email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  className="rounded-lg h-11"
+                />
+
+                <Input
+                  placeholder="Password"
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  className="rounded-lg h-11"
+                />
+
+                <select
+                  className="w-full border border-neutral-300 rounded-lg h-11 px-3"
+                  value={role}
+                  onChange={e => setRole(e.target.value as Role)}
+                >
+                  {ROLES.map(r => (
+                    <option key={r.value} value={r.value}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+
+                <Input
+                  placeholder="National ID (verification only)"
+                  value={nationalId}
+                  onChange={e => setNationalId(e.target.value)}
+                  className="rounded-lg h-11"
+                />
+
+                <Button
+                  className="w-full rounded-lg h-11 text-base"
+                  onClick={handleRegister}
+                  disabled={loading}
+                >
+                  {loading ? 'Creating account…' : 'Register'}
+                </Button>
+
+                <div className="text-sm text-center pt-2">
+                  Already have an account?{' '}
+                  <Link href="/login" className="underline hover:text-indigo-600">
+                    Login
+                  </Link>
+                </div>
+
+              </CardContent>
+            </Card>
+
           </div>
-        </CardContent>
-      </Card>
+        </div>
+
+      </div>
     </div>
   )
 }

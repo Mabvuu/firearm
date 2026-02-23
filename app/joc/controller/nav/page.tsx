@@ -65,6 +65,12 @@ export default function NavPage() {
       { href: '/joc/controller/application', label: 'Applications' },
       { href: '/joc/controller/reports', label: 'Reports' },
       { href: '/joc/controller/profile', label: 'Profile' },
+
+      // ✅ NEW: Wallets
+      { href: '/wallet', label: 'Wallets' },
+
+      // ✅ Universal blacklist
+      { href: '/blacklist', label: 'Blacklist' },
     ],
     []
   )

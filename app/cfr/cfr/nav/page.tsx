@@ -39,12 +39,12 @@ function pickGreeting(uid: string) {
   return RETURNING_GREETINGS[idx]
 }
 
-/* 🎨 GRAY PALETTE (inline, as requested) */
+/* 🎨 GRAY PALETTE */
 const COLORS = {
-  background: '#ACACAC',        // cool grey medium
-  panel: '#D9D8D6',             // natural aluminum
-  textPrimary: '#212B37',       // black blue
-  textSecondary: '#FAF9EC',     // snow white
+  background: '#ACACAC',
+  panel: '#D9D8D6',
+  textPrimary: '#212B37',
+  textSecondary: '#FAF9EC',
   activeBg: 'rgba(255,255,255,0.25)',
   border: 'rgba(0,0,0,0.15)',
 } as const
@@ -62,7 +62,11 @@ export default function NavPage() {
       { href: '/cfr/cfr/dashboard', label: 'Home' },
       { href: '/cfr/cfr/application', label: 'Applications' },
       { href: '/cfr/cfr/applicants', label: 'Applicants' },
-     
+
+      // ✅ NEW: Wallets
+      { href: '/wallet', label: 'Wallets' },
+
+      { href: '/blacklist', label: 'Blacklist' },
     ],
     []
   )
@@ -93,8 +97,7 @@ export default function NavPage() {
     router.push('/login')
   }
 
-  const isActive = (href: string) =>
-    pathname === href || pathname?.startsWith(href + '/')
+  const isActive = (href: string) => pathname === href || pathname?.startsWith(href + '/')
 
   return (
     <aside
@@ -110,17 +113,11 @@ export default function NavPage() {
           </div>
         ) : (
           <div className="space-y-1">
-            <div
-              className="text-xl font-semibold leading-tight"
-              style={{ color: COLORS.textPrimary }}
-            >
+            <div className="text-xl font-semibold leading-tight" style={{ color: COLORS.textPrimary }}>
               {greeting}
             </div>
 
-            <div
-              className="text-sm leading-snug"
-              style={{ color: COLORS.textPrimary, opacity: 0.75 }}
-            >
+            <div className="text-sm leading-snug" style={{ color: COLORS.textPrimary, opacity: 0.75 }}>
               {profile?.role}
               {profile?.email ? <span> • {profile.email}</span> : null}
             </div>

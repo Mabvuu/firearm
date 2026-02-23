@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import DeclineButton from '@/components/DeclineButton'
 
 type Application = {
   id: number
@@ -216,35 +217,6 @@ export default function JOCControllerApplicationsPage() {
     }
   }
 
-  const handleDecline = async (appId: number) => {
-    const app = apps.find((a) => a.id === appId)
-    if (app && isFinalStatus(app.status)) return
-
-    try {
-      setActingId(appId)
-      setErrorMsg(null)
-
-      const res = await fetch('/api/joc/controller/decision', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'decline', applicationId: appId }),
-      })
-
-      const data = await safeJson(res)
-      if (!res.ok || data?.ok === false) {
-        setErrorMsg(data?.error || 'Decline failed')
-        return
-      }
-
-      updateLocalStatus(appId, 'declined')
-    } catch (e) {
-      console.error(e)
-      setErrorMsg('Decline failed')
-    } finally {
-      setActingId(null)
-    }
-  }
-
   const handleAcceptMakeWallet = async (appRow: Application) => {
     const app = apps.find((a) => a.id === appRow.id)
     if (app && isFinalStatus(app.status)) return
@@ -386,32 +358,44 @@ export default function JOCControllerApplicationsPage() {
 
                           <div className="text-sm">
                             <b>Competency:</b>
-                            <div className="text-muted-foreground whitespace-pre-wrap">{comp?.notes?.trim() ? comp.notes : '-'}</div>
+                            <div className="text-muted-foreground whitespace-pre-wrap">
+                              {comp?.notes?.trim() ? comp.notes : '-'}
+                            </div>
                           </div>
 
                           <div className="text-sm">
                             <b>CFR:</b>
-                            <div className="text-muted-foreground whitespace-pre-wrap">{app.cfr_notes?.trim() ? app.cfr_notes : '-'}</div>
+                            <div className="text-muted-foreground whitespace-pre-wrap">
+                              {app.cfr_notes?.trim() ? app.cfr_notes : '-'}
+                            </div>
                           </div>
 
                           <div className="text-sm">
                             <b>Dispol:</b>
-                            <div className="text-muted-foreground whitespace-pre-wrap">{app.dispol_notes?.trim() ? app.dispol_notes : '-'}</div>
+                            <div className="text-muted-foreground whitespace-pre-wrap">
+                              {app.dispol_notes?.trim() ? app.dispol_notes : '-'}
+                            </div>
                           </div>
 
                           <div className="text-sm">
                             <b>Propol:</b>
-                            <div className="text-muted-foreground whitespace-pre-wrap">{app.propol_notes?.trim() ? app.propol_notes : '-'}</div>
+                            <div className="text-muted-foreground whitespace-pre-wrap">
+                              {app.propol_notes?.trim() ? app.propol_notes : '-'}
+                            </div>
                           </div>
 
                           <div className="text-sm">
                             <b>JOC OIC:</b>
-                            <div className="text-muted-foreground whitespace-pre-wrap">{app.joc_oic_notes?.trim() ? app.joc_oic_notes : '-'}</div>
+                            <div className="text-muted-foreground whitespace-pre-wrap">
+                              {app.joc_oic_notes?.trim() ? app.joc_oic_notes : '-'}
+                            </div>
                           </div>
 
                           <div className="text-sm">
                             <b>JOC MID:</b>
-                            <div className="text-muted-foreground whitespace-pre-wrap">{app.joc_mid_notes?.trim() ? app.joc_mid_notes : '-'}</div>
+                            <div className="text-muted-foreground whitespace-pre-wrap">
+                              {app.joc_mid_notes?.trim() ? app.joc_mid_notes : '-'}
+                            </div>
                           </div>
                         </div>
 
@@ -435,9 +419,12 @@ export default function JOCControllerApplicationsPage() {
 
                           {!isFinal && (
                             <>
-                              <Button variant="destructive" disabled={isBusy} onClick={() => void handleDecline(app.id)}>
-                                {isBusy ? 'Working…' : 'Decline'}
-                              </Button>
+                              <DeclineButton
+                                applicationId={app.id}
+                                stage="JOC Controller"
+                                disabled={isBusy}
+                                onSuccess={() => updateLocalStatus(app.id, 'declined')}
+                              />
 
                               <Button disabled={isBusy} onClick={() => void handleAcceptMakeWallet(app)}>
                                 {isBusy ? 'Working…' : 'Accept & Transfer Ownership'}
